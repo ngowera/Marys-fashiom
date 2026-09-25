@@ -1,0 +1,19 @@
+{
+  "name": "Mary’s Fashion",
+  "short_name": "marysfashion",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f7f7f2",
+  "theme_color": "#264d3d",
+  "description": "Dresses, shoes and accessories in Malawi kwacha.",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icons/nyasa-threads-app.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

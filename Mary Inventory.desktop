@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Mary Inventory
+Comment=Manage products, photos, prices and stock
+Exec="/home/mary-tamvekenji/Documents/Mary's fashion/open-mary-inventory.sh"
+Icon=/home/mary-tamvekenji/Documents/Mary's fashion/assets/images/nyasa-threads-logo.png
+Terminal=false
+Categories=Office;

@@ -1,0 +1,1 @@
+One Mary Inventory Flutter app targeting both Android and Linux. It includes live inventory, orders, operations, monthly, six-month and yearly sales reports. See ../../SEPARATE_APPS.md for builds and connection setup.
