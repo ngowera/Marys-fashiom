@@ -138,6 +138,8 @@ class Api {
           'message-send',
           'message-read',
           'message-status',
+          'reviews',
+          'review-submit',
         ].contains(path)) {
       throw Exception(
         'Staff Supabase connection is not set up yet. Use the shared API_URL for both apps until migration is complete.',
@@ -163,6 +165,8 @@ class Api {
           'message-send',
           'message-read',
           'message-status',
+          'reviews',
+          'review-submit',
         ].contains(path)) {
       return _supabaseCall(path, data);
     }
@@ -299,6 +303,46 @@ class Api {
       'Authorization': 'Bearer ${token.isNotEmpty ? token : supabaseKey}',
     };
     late http.Response response;
+    if (path == 'reviews') {
+      final productId = Uri.encodeQueryComponent(
+        data?['product_id']?.toString() ?? '',
+      );
+      response = await client
+          .get(
+            Uri.parse(
+              '$supabaseUrl/rest/v1/product_reviews?select=id,product_id,reviewer_name,rating,body,created_at&product_id=eq.$productId&order=created_at.desc',
+            ),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 400) {
+        throw Exception('Unable to load customer reviews.');
+      }
+      return {'reviews': jsonDecode(response.body) as List};
+    }
+    if (path == 'review-submit') {
+      if (token.isEmpty) throw Exception('Sign in before writing a review.');
+      response = await client
+          .post(
+            Uri.parse('$supabaseUrl/rest/v1/rpc/submit_product_review'),
+            headers: headers,
+            body: jsonEncode({
+              'p_product_id': data?['product_id'],
+              'p_rating': data?['rating'],
+              'p_body': data?['body'],
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 400) {
+        final body = jsonDecode(response.body);
+        throw Exception(
+          body is Map
+              ? body['message'] ?? 'Unable to save your review.'
+              : 'Unable to save your review.',
+        );
+      }
+      return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+    }
     if (path == 'admin') {
       final responses = await Future.wait([
         client.get(
@@ -2134,29 +2178,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       ),
                       const SizedBox(height: 5),
                       priceLabel(p, size: 14),
-                      const Row(
-                        children: [
-                          Icon(Icons.star, size: 16, color: Color(0xffd59a28)),
-                          SizedBox(width: 3),
-                          Text(
-                            '4.8',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(width: 7),
-                          Flexible(
-                            child: Text(
-                              'Verified reviews',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Color(0xff697469),
-                              ),
-                            ),
-                          ),
-                        ],
+                      const Text(
+                        'Open to see verified customer reviews',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xff697469),
+                        ),
                       ),
                       TextButton.icon(
                         style: TextButton.styleFrom(

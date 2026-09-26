@@ -40,7 +40,7 @@ class _AccountDialogState extends State<AccountDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(creating ? 'Create your account' : 'Sign in to messages'),
+    title: Text(creating ? 'Create your account' : 'Sign in'),
     content: SizedBox(
       width: 420,
       child: Column(

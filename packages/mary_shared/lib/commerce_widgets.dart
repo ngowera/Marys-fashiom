@@ -24,6 +24,11 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
   late final List<String> images;
   int quantity = 1;
   late bool saved;
+  final reviewBody = TextEditingController();
+  List<dynamic> customerReviews = [];
+  bool reviewsLoading = true, reviewSending = false;
+  int reviewRating = 5;
+  String reviewError = '';
 
   Map<String, dynamic> get p => widget.product;
 
@@ -33,6 +38,64 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
     images = List<String>.from(p['images'] ?? [p['image']]);
     image = images.first;
     saved = widget.saved;
+    loadReviews();
+  }
+
+  @override
+  void dispose() {
+    reviewBody.dispose();
+    super.dispose();
+  }
+
+  Future<void> loadReviews() async {
+    try {
+      final result = await Api.call('reviews', {'product_id': p['id']});
+      if (mounted) {
+        setState(() {
+          customerReviews = result['reviews'] as List? ?? [];
+          reviewsLoading = false;
+          reviewError = '';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          reviewsLoading = false;
+          reviewError = 'Reviews are temporarily unavailable.';
+        });
+      }
+    }
+  }
+
+  Future<void> submitReview() async {
+    if (Api.token.isEmpty) {
+      final signedIn = await showDialog<bool>(
+        context: context,
+        builder: (_) => const AccountDialog(),
+      );
+      if (signedIn != true || !mounted) return;
+    }
+    setState(() {
+      reviewSending = true;
+      reviewError = '';
+    });
+    try {
+      await Api.call('review-submit', {
+        'product_id': p['id'],
+        'rating': reviewRating,
+        'body': reviewBody.text.trim(),
+      });
+      reviewBody.clear();
+      await loadReviews();
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => reviewError = e.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => reviewSending = false);
+    }
   }
 
   Widget gallery(bool desktop) {
@@ -216,14 +279,16 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
       const SizedBox(height: 8),
       Text(p['name'], style: Theme.of(context).textTheme.headlineMedium),
       const SizedBox(height: 8),
-      const Row(
+      Row(
         children: [
-          Icon(Icons.star, color: Color(0xffd59a28), size: 20),
-          SizedBox(width: 5),
+          const Icon(Icons.star, color: Color(0xffd59a28), size: 20),
+          const SizedBox(width: 5),
           Expanded(
             child: Text(
-              '4.8  ·  24 verified reviews',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              customerReviews.isEmpty
+                  ? 'No verified reviews yet'
+                  : '${(customerReviews.fold<num>(0, (sum, r) => sum + ((r as Map)['rating'] as num)) / customerReviews.length).toStringAsFixed(1)}  ·  ${customerReviews.length} verified ${customerReviews.length == 1 ? 'review' : 'reviews'}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -265,7 +330,7 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
       ),
       const SizedBox(height: 9),
       const Text(
-        '95% of customers say the fit is true to size',
+        'Check the listed size and colour before adding this item.',
         style: TextStyle(fontSize: 13, color: Color(0xff697469)),
       ),
       Wrap(
@@ -335,50 +400,26 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
         style: TextStyle(fontFamily: 'BrandSerif', fontSize: 27),
       ),
       const SizedBox(height: 9),
-      const Wrap(
-        spacing: 18,
-        runSpacing: 8,
-        children: [
-          Text(
-            '4.8 ★★★★★',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xffd59a28),
-            ),
-          ),
-          Text(
-            '24 reviews  ·  Verified purchases',
-            style: TextStyle(color: green),
-          ),
-        ],
+      Text(
+        customerReviews.isEmpty
+            ? 'No reviews yet. Reviews can only be written by verified purchasers.'
+            : '${customerReviews.length} verified ${customerReviews.length == 1 ? 'purchase' : 'purchases'}',
+        style: const TextStyle(color: green),
       ),
       const SizedBox(height: 16),
-      for (final r in const [
-        (
-          'Thoko M.',
-          'Beautiful quality and the colour looks just like the photos. It arrived carefully packed.',
-        ),
-        (
-          'Ruth K.',
-          'The fit was true to size and it feels comfortable enough to wear all day.',
-        ),
-        (
-          'Memory B.',
-          'Lovely piece and helpful service. I would happily order from Mary’s Fashion again.',
-        ),
-      ])
+      if (reviewsLoading) const LinearProgressIndicator(),
+      for (final review in customerReviews)
         Padding(
           padding: const EdgeInsets.only(bottom: 18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${r.$1}   ★★★★★',
+                '${review['reviewer_name']}   ${List.filled((review['rating'] as num).toInt(), '★').join()}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 5),
-              Text(r.$2, style: const TextStyle(height: 1.4)),
+              Text(review['body'], style: const TextStyle(height: 1.4)),
               const SizedBox(height: 7),
               const Text(
                 'Verified purchase',
@@ -387,6 +428,61 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
             ],
           ),
         ),
+      const Divider(height: 28),
+      const Text(
+        'Write a review',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 6),
+      const Text(
+        'You must sign in with the account used when purchasing this item. The order must be paid or completed.',
+        style: TextStyle(color: Color(0xff697469)),
+      ),
+      const SizedBox(height: 10),
+      Wrap(
+        spacing: 2,
+        children: List.generate(
+          5,
+          (index) => IconButton(
+            tooltip: '${index + 1} stars',
+            onPressed: reviewSending
+                ? null
+                : () => setState(() => reviewRating = index + 1),
+            icon: Icon(
+              index < reviewRating ? Icons.star : Icons.star_border,
+              color: const Color(0xffd59a28),
+            ),
+          ),
+        ),
+      ),
+      TextField(
+        controller: reviewBody,
+        enabled: !reviewSending,
+        minLines: 3,
+        maxLines: 6,
+        maxLength: 1000,
+        decoration: const InputDecoration(
+          labelText: 'Your honest review',
+          hintText: 'Share details about quality, fit, and your experience.',
+        ),
+      ),
+      if (reviewError.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(reviewError, style: const TextStyle(color: Colors.red)),
+        ),
+      const SizedBox(height: 10),
+      FilledButton.icon(
+        onPressed: reviewSending ? null : submitReview,
+        icon: const Icon(Icons.verified_outlined),
+        label: Text(
+          reviewSending
+              ? 'Checking purchase…'
+              : Api.token.isEmpty
+              ? 'Sign in and review'
+              : 'Submit verified review',
+        ),
+      ),
     ],
   );
 
@@ -1071,6 +1167,13 @@ class _CheckoutFlowState extends State<CheckoutFlow> {
     if (step < 3) {
       setState(() => step++);
       return;
+    }
+    if (Api.usesSupabase && Api.token.isEmpty) {
+      final signedIn = await showDialog<bool>(
+        context: context,
+        builder: (_) => const AccountDialog(),
+      );
+      if (signedIn != true || !mounted) return;
     }
     setState(() {
       sending = true;

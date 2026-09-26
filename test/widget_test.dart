@@ -255,6 +255,9 @@ void main() {
       await t.ensureVisible(find.text('Terracotta dress'));
       await t.tap(find.text('Terracotta dress'));
       await t.pumpAndSettle();
+      expect(find.text('Customer reviews'), findsOneWidget);
+      expect(find.text('Sign in and review'), findsOneWidget);
+      expect(find.textContaining('24 verified reviews'), findsNothing);
       expect(
         t
             .widget<FilledButton>(
