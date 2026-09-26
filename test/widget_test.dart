@@ -58,6 +58,67 @@ void main() {
     expect(find.widgetWithText(ChoiceChip, 'Dresses'), findsNothing);
   });
 
+  testWidgets('Featured lists the most expensive products first', (t) async {
+    Api.client = MockClient(
+      (_) async => http.Response(
+        jsonEncode({
+          'products': [
+            {
+              'id': 'LOW',
+              'name': 'Budget piece',
+              'category': 'Dresses',
+              'price': 10000,
+              'description': 'Budget',
+              'image': 'dress.jpg',
+              'variants': {'M': 1},
+              'active': 1,
+            },
+            {
+              'id': 'HIGH',
+              'name': 'Premium piece',
+              'category': 'Dresses',
+              'price': 50000,
+              'description': 'Premium',
+              'image': 'dress.jpg',
+              'variants': {'M': 1},
+              'active': 1,
+            },
+            {
+              'id': 'MID',
+              'name': 'Midrange piece',
+              'category': 'Dresses',
+              'price': 30000,
+              'description': 'Midrange',
+              'image': 'dress.jpg',
+              'variants': {'M': 1},
+              'active': 1,
+            },
+          ],
+        }),
+        200,
+      ),
+    );
+
+    await t.pumpWidget(const MarysFashionApp());
+    await t.pumpAndSettle();
+
+    final names = t
+        .widgetList<Text>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                {
+                  'Premium piece',
+                  'Midrange piece',
+                  'Budget piece',
+                }.contains(widget.data),
+          ),
+        )
+        .map((text) => text.data)
+        .toList();
+    expect(names, ['Premium piece', 'Midrange piece', 'Budget piece']);
+  });
+
   testWidgets('Website refreshes published products without reopening', (
     t,
   ) async {

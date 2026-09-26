@@ -1822,7 +1822,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     if (sort == 'Price: low to high') {
       list.sort((a, b) => (a['price'] as int).compareTo(b['price']));
     }
-    if (sort == 'Price: high to low') {
+    if (sort == 'Featured' || sort == 'Price: high to low') {
       list.sort((a, b) => (b['price'] as int).compareTo(a['price']));
     }
     return Column(
