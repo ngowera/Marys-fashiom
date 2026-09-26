@@ -356,7 +356,7 @@ class Api {
           headers: headers,
         ),
       ]).timeout(const Duration(seconds: 15));
-      if (responses.any((item) => item.statusCode >= 400)) {
+      if (responses.take(8).any((item) => item.statusCode >= 400)) {
         throw Exception('Unable to load inventory from Supabase.');
       }
       final rows = jsonDecode(responses.first.body) as List;
@@ -367,7 +367,9 @@ class Api {
       final returnRows = jsonDecode(responses[5].body) as List;
       final collectionRows = jsonDecode(responses[6].body) as List;
       final supplierRows = jsonDecode(responses[7].body) as List;
-      final transactionRows = jsonDecode(responses[8].body) as List;
+      final transactionRows = responses[8].statusCode < 400
+          ? jsonDecode(responses[8].body) as List
+          : <dynamic>[];
       final orders = orderRows.map((row) {
         final order = Map<String, dynamic>.from(row as Map);
         order['payment'] = order['payment_status'];
