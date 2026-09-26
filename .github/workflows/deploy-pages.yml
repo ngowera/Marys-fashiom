@@ -58,6 +58,28 @@ jobs:
           --dart-define=SUPABASE_URL="$SUPABASE_URL"
           --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
 
+      - name: Install inventory dependencies
+        run: flutter pub get
+
+      - name: Build inventory website
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: >-
+          flutter build web
+          --release
+          --no-web-resources-cdn
+          --target lib/main_inventory.dart
+          --output build/inventory
+          --base-href "${{ steps.site.outputs.base_path }}inventory/"
+          --dart-define=SUPABASE_URL="$SUPABASE_URL"
+          --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+
+      - name: Add inventory to Pages artifact
+        run: |
+          mkdir -p apps/marys_fashion_website/build/web/inventory
+          cp -a build/inventory/. apps/marys_fashion_website/build/web/inventory/
+
       - name: Prevent Jekyll processing
         run: touch apps/marys_fashion_website/build/web/.nojekyll
 

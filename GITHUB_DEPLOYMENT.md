@@ -1,8 +1,8 @@
 # GitHub deployment
 
-This repository is prepared to publish only the customer website from
-`apps/marys_fashion_website`. The inventory app and its source stay in the same
-repository, but GitHub Pages does not build or expose it as a separate website.
+This repository publishes the customer website from `apps/marys_fashion_website`
+and the protected inventory web app from `lib/main_inventory.dart`. The apps use
+the same Supabase data but have separate URLs.
 
 ## First publication
 
@@ -19,6 +19,8 @@ The first default address will be:
 ```text
 https://YOUR-GITHUB-USERNAME.github.io/YOUR-REPOSITORY-NAME/
 ```
+
+The inventory address is the same URL followed by `inventory/`.
 
 For example, a repository named `marys-fashion` owned by `mary` would use
 `https://mary.github.io/marys-fashion/`.
@@ -47,6 +49,5 @@ site uses email links, Google sign-in, or another OAuth provider.
 ## What GitHub Pages does not host
 
 GitHub Pages serves static files only. It will not run the Python server in
-`server/`. The production customer website therefore uses the direct Supabase
-connection already implemented in the shared Dart package. Payment processing
-continues through the Supabase Edge Function rather than through GitHub Pages.
+`server/`. Both web apps therefore use their direct Supabase connection. Payment
+processing continues through the Supabase Edge Function rather than Pages.
