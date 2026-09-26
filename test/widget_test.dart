@@ -31,6 +31,26 @@ void main() {
       ),
     );
   });
+  testWidgets('Explore Woman is default and Men shows Suit and Shoes', (
+    t,
+  ) async {
+    await t.pumpWidget(const MarysFashionApp());
+    await t.pumpAndSettle();
+
+    final woman = t.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'Explore Woman'),
+    );
+    expect(woman.selected, isTrue);
+    expect(find.widgetWithText(ChoiceChip, 'Dresses'), findsOneWidget);
+
+    await t.tap(find.widgetWithText(ChoiceChip, 'Men'));
+    await t.pumpAndSettle();
+
+    expect(find.widgetWithText(ChoiceChip, 'Suit'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Shoes'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Dresses'), findsNothing);
+  });
+
   testWidgets('Website refreshes published products without reopening', (
     t,
   ) async {

@@ -24,8 +24,7 @@ part 'transaction_widgets.dart';
 const ink = Color(0xff22251f),
     green = Color(0xff264d3d),
     cream = Color(0xfff7f7f2);
-const categories = [
-  'All',
+const womenCategories = [
   'Outfit',
   'Topwear',
   'Bottomwear',
@@ -35,6 +34,8 @@ const categories = [
   'Bags',
   'Accessories',
 ];
+const menCategories = ['Suit', 'Shoes'];
+const categories = ['All', ...womenCategories, 'Suit'];
 const specialCollections = ['New Arrivals', 'Best Sellers', 'Sale / Clearance'];
 String money(num n) =>
     'MWK ${n.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
@@ -425,41 +426,45 @@ class Api {
         'collections': collectionRows,
         'transactions': [
           ...transactionRows.map((row) {
-          final transaction = Map<String, dynamic>.from(row as Map);
-          final order = orderById[transaction['order_id']];
-          transaction['customer'] = order?['customer'] ?? 'Customer';
-          transaction['order_status'] = order?['status'];
-          transaction['source'] = 'PayChangu';
-          return transaction;
+            final transaction = Map<String, dynamic>.from(row as Map);
+            final order = orderById[transaction['order_id']];
+            transaction['customer'] = order?['customer'] ?? 'Customer';
+            transaction['order_status'] = order?['status'];
+            transaction['source'] = 'PayChangu';
+            return transaction;
           }),
-          ...collectionRows.where((collection) {
-            final value = collection as Map;
-            return !transactionRows.any((transaction) =>
-                (transaction as Map)['order_id'] == value['order_id'] &&
-                (transaction)['status'] == 'success');
-          }).map((row) {
-            final collection = Map<String, dynamic>.from(row as Map);
-            final order = orderById[collection['order_id']];
-            return {
-              'tx_ref': 'MANUAL-${collection['reference']}',
-              'order_id': collection['order_id'],
-              'amount': collection['amount'],
-              'currency': 'MWK',
-              'status': 'success',
-              'provider_reference': collection['reference'],
-              'payment_method': 'Manual collection',
-              'channel': 'Staff recorded',
-              'provider_type': 'Manual payment',
-              'provider_mode': 'offline',
-              'provider_charges': 0,
-              'completed_at': collection['created_at'],
-              'created_at': collection['created_at'],
-              'updated_at': collection['created_at'],
-              'customer': order?['customer'] ?? 'Customer',
-              'order_status': order?['status'],
-              'source': 'Manual collection',
-            };
-          }),
+          ...collectionRows
+              .where((collection) {
+                final value = collection as Map;
+                return !transactionRows.any(
+                  (transaction) =>
+                      (transaction as Map)['order_id'] == value['order_id'] &&
+                      (transaction)['status'] == 'success',
+                );
+              })
+              .map((row) {
+                final collection = Map<String, dynamic>.from(row as Map);
+                final order = orderById[collection['order_id']];
+                return {
+                  'tx_ref': 'MANUAL-${collection['reference']}',
+                  'order_id': collection['order_id'],
+                  'amount': collection['amount'],
+                  'currency': 'MWK',
+                  'status': 'success',
+                  'provider_reference': collection['reference'],
+                  'payment_method': 'Manual collection',
+                  'channel': 'Staff recorded',
+                  'provider_type': 'Manual payment',
+                  'provider_mode': 'offline',
+                  'provider_charges': 0,
+                  'completed_at': collection['created_at'],
+                  'created_at': collection['created_at'],
+                  'updated_at': collection['created_at'],
+                  'customer': order?['customer'] ?? 'Customer',
+                  'order_status': order?['status'],
+                  'source': 'Manual collection',
+                };
+              }),
         ],
         'orders': orders,
         'movements': movementRows.map((row) {
@@ -676,10 +681,7 @@ class Api {
         response = await client
             .patch(
               Uri.parse('$supabaseUrl/rest/v1/products?id=eq.$id'),
-              headers: {
-                ...headers,
-                'Prefer': 'return=representation',
-              },
+              headers: {...headers, 'Prefer': 'return=representation'},
               body: jsonEncode({'active': false}),
             )
             .timeout(const Duration(seconds: 15));
@@ -1163,7 +1165,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   final List<Map<String, dynamic>> bag = [];
   final Set<String> saved = {};
   final Set<String> compared = {};
-  String category = 'All',
+  String audience = 'Woman',
+      category = 'All',
       collection = 'All',
       query = '',
       sort = 'Featured',
@@ -1420,8 +1423,21 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             : [
                 if (wide)
                   TextButton(
-                    onPressed: () => setState(() => page = 'Shop'),
-                    child: const Text('The collection'),
+                    onPressed: () => setState(() {
+                      page = 'Shop';
+                      audience = 'Woman';
+                      category = 'All';
+                    }),
+                    child: const Text('Explore Woman'),
+                  ),
+                if (wide)
+                  TextButton(
+                    onPressed: () => setState(() {
+                      page = 'Shop';
+                      audience = 'Men';
+                      category = 'All';
+                    }),
+                    child: const Text('Men'),
                   ),
                 Badge(
                   label: Text('$count'),
@@ -1730,10 +1746,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     final enabledCollections =
         (settings['enabled_collections'] as List?)?.cast<String>() ??
         specialCollections;
+    final activeCategories = audience == 'Men'
+        ? menCategories
+        : womenCategories;
     final q = query.trim().toLowerCase();
     var list = products
         .where(
           (p) =>
+              activeCategories.contains(p['category']) &&
               (category == 'All' ||
                   (enabledCategories.contains(category) &&
                       p['category'] == category)) &&
@@ -1877,10 +1897,38 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 30),
         Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('Explore Woman'),
+              selected: audience == 'Woman',
+              onSelected: (_) => setState(() {
+                audience = 'Woman';
+                category = 'All';
+              }),
+            ),
+            ChoiceChip(
+              label: const Text('Men'),
+              selected: audience == 'Men',
+              onSelected: (_) => setState(() {
+                audience = 'Men';
+                category = 'All';
+              }),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: categories
-              .where((c) => c == 'All' || enabledCategories.contains(c))
+          children: ['All', ...activeCategories]
+              .where(
+                (c) =>
+                    c == 'All' ||
+                    enabledCategories.contains(c) ||
+                    audience == 'Men',
+              )
               .map(
                 (c) => ChoiceChip(
                   label: Padding(
@@ -2719,18 +2767,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               spacing: 16,
               runSpacing: 16,
               children: [
-                stat(
-                  'Stock at cost',
-                  money(health['stock_cost_value'] ?? 0),
-                ),
+                stat('Stock at cost', money(health['stock_cost_value'] ?? 0)),
                 stat(
                   'Potential stock sales',
                   money(health['stock_retail_value'] ?? 0),
                 ),
-                stat(
-                  'Margin rate',
-                  '${allTimeReport['margin_rate'] ?? 0}%',
-                ),
+                stat('Margin rate', '${allTimeReport['margin_rate'] ?? 0}%'),
                 stat(
                   'Low-stock options',
                   '${health['low_stock_variants'] ?? 0}',
