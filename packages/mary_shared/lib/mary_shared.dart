@@ -347,7 +347,7 @@ class Api {
       final responses = await Future.wait([
         client.get(
           Uri.parse(
-            '$supabaseUrl/rest/v1/products?select=id,name,audience,category,regular_price,sale_price,unit_cost,description,images,variants,collections,active&order=created_at.asc',
+            '$supabaseUrl/rest/v1/products?select=id,name,audience,category,regular_price,sale_price,unit_cost,description,images,variants,collections,active,created_at&order=created_at.asc',
           ),
           headers: headers,
         ),
@@ -768,7 +768,7 @@ class Api {
     if (path == 'products') {
       final productsFuture = client.get(
         Uri.parse(
-          '$supabaseUrl/rest/v1/products?select=id,name,audience,category,regular_price,sale_price,description,images,variants,collections,active&active=eq.true&order=created_at.asc',
+          '$supabaseUrl/rest/v1/products?select=id,name,audience,category,regular_price,sale_price,description,images,variants,collections,active,created_at&active=eq.true&order=created_at.asc',
         ),
         headers: headers,
       );
@@ -1819,10 +1819,19 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               (!onlySaved || saved.contains(p['id'])),
         )
         .toList();
+    if (sort == 'Featured') {
+      list.sort(
+        (a, b) => (b['created_at']?.toString() ?? '').compareTo(
+          a['created_at']?.toString() ?? '',
+        ),
+      );
+      if (list.length > 8) list.removeRange(8, list.length);
+      list.sort((a, b) => (b['price'] as int).compareTo(a['price']));
+    }
     if (sort == 'Price: low to high') {
       list.sort((a, b) => (a['price'] as int).compareTo(b['price']));
     }
-    if (sort == 'Featured' || sort == 'Price: high to low') {
+    if (sort == 'Price: high to low') {
       list.sort((a, b) => (b['price'] as int).compareTo(a['price']));
     }
     return Column(

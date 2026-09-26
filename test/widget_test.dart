@@ -58,45 +58,25 @@ void main() {
     expect(find.widgetWithText(ChoiceChip, 'Dresses'), findsNothing);
   });
 
-  testWidgets('Featured lists the most expensive products first', (t) async {
+  testWidgets('Featured shows the latest eight ordered by highest price', (
+    t,
+  ) async {
+    final uploaded = List.generate(9, (index) {
+      final number = index + 1;
+      return {
+        'id': 'ITEM-$number',
+        'name': 'Piece $number',
+        'category': 'Dresses',
+        'price': index == 0 ? 100000 : number * 10000,
+        'description': 'Catalogue piece',
+        'image': 'dress.jpg',
+        'variants': {'M': 1},
+        'active': 1,
+        'created_at': '2026-09-${number.toString().padLeft(2, '0')}T10:00:00Z',
+      };
+    });
     Api.client = MockClient(
-      (_) async => http.Response(
-        jsonEncode({
-          'products': [
-            {
-              'id': 'LOW',
-              'name': 'Budget piece',
-              'category': 'Dresses',
-              'price': 10000,
-              'description': 'Budget',
-              'image': 'dress.jpg',
-              'variants': {'M': 1},
-              'active': 1,
-            },
-            {
-              'id': 'HIGH',
-              'name': 'Premium piece',
-              'category': 'Dresses',
-              'price': 50000,
-              'description': 'Premium',
-              'image': 'dress.jpg',
-              'variants': {'M': 1},
-              'active': 1,
-            },
-            {
-              'id': 'MID',
-              'name': 'Midrange piece',
-              'category': 'Dresses',
-              'price': 30000,
-              'description': 'Midrange',
-              'image': 'dress.jpg',
-              'variants': {'M': 1},
-              'active': 1,
-            },
-          ],
-        }),
-        200,
-      ),
+      (_) async => http.Response(jsonEncode({'products': uploaded}), 200),
     );
 
     await t.pumpWidget(const MarysFashionApp());
@@ -106,17 +86,22 @@ void main() {
         .widgetList<Text>(
           find.byWidgetPredicate(
             (widget) =>
-                widget is Text &&
-                {
-                  'Premium piece',
-                  'Midrange piece',
-                  'Budget piece',
-                }.contains(widget.data),
+                widget is Text && (widget.data?.startsWith('Piece ') ?? false),
           ),
         )
         .map((text) => text.data)
         .toList();
-    expect(names, ['Premium piece', 'Midrange piece', 'Budget piece']);
+    expect(names, [
+      'Piece 9',
+      'Piece 8',
+      'Piece 7',
+      'Piece 6',
+      'Piece 5',
+      'Piece 4',
+      'Piece 3',
+      'Piece 2',
+    ]);
+    expect(find.text('Piece 1'), findsNothing);
   });
 
   testWidgets('Website refreshes published products without reopening', (
