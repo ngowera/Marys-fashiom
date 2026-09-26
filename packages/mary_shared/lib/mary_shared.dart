@@ -34,7 +34,7 @@ const womenCategories = [
   'Bags',
   'Accessories',
 ];
-const menCategories = ['Suit', 'Shoes'];
+const menCategories = ['Suit', 'Topwear', 'Bottomwear', 'Shoes'];
 const categories = ['All', ...womenCategories, 'Suit'];
 const specialCollections = ['New Arrivals', 'Best Sellers', 'Sale / Clearance'];
 String money(num n) =>
@@ -303,7 +303,7 @@ class Api {
       final responses = await Future.wait([
         client.get(
           Uri.parse(
-            '$supabaseUrl/rest/v1/products?select=id,name,category,regular_price,sale_price,unit_cost,description,images,variants,collections,active&order=created_at.asc',
+            '$supabaseUrl/rest/v1/products?select=id,name,audience,category,regular_price,sale_price,unit_cost,description,images,variants,collections,active&order=created_at.asc',
           ),
           headers: headers,
         ),
@@ -693,6 +693,7 @@ class Api {
       final product = {
         'id': data!['id'],
         'name': data['name'],
+        'audience': data['audience'],
         'category': data['category'],
         'regular_price': data['price'],
         'sale_price': data['sale_price'],
@@ -721,7 +722,7 @@ class Api {
     if (path == 'products') {
       final productsFuture = client.get(
         Uri.parse(
-          '$supabaseUrl/rest/v1/products?select=id,name,category,regular_price,sale_price,description,images,variants,collections,active&active=eq.true&order=created_at.asc',
+          '$supabaseUrl/rest/v1/products?select=id,name,audience,category,regular_price,sale_price,description,images,variants,collections,active&active=eq.true&order=created_at.asc',
         ),
         headers: headers,
       );
@@ -1428,7 +1429,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       audience = 'Woman';
                       category = 'All';
                     }),
-                    child: const Text('Explore Woman'),
+                    child: const Text('Women'),
                   ),
                 if (wide)
                   TextButton(
@@ -1753,6 +1754,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     var list = products
         .where(
           (p) =>
+              ((p['audience'] ?? (p['category'] == 'Suit' ? 'Men' : 'Woman')) ==
+                  audience) &&
               activeCategories.contains(p['category']) &&
               (category == 'All' ||
                   (enabledCategories.contains(category) &&
@@ -1830,12 +1833,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     'Find the dress. Add the shoes. Make it yours.\nExplore your next everyday favourites.',
                     style: TextStyle(height: 1.7, color: Color(0xff5a645c)),
                   ),
-                  const SizedBox(height: 16),
-                  TextButton.icon(
-                    onPressed: () => setState(() => category = 'Dresses'),
-                    label: const Text('Explore dresses'),
-                    icon: const Icon(Icons.arrow_forward, size: 18),
-                  ),
                 ],
               ),
             ),
@@ -1895,13 +1892,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             ],
           ],
         ),
-        const SizedBox(height: 30),
+        const SizedBox(height: 18),
         Wrap(
           spacing: 10,
           runSpacing: 8,
           children: [
             ChoiceChip(
-              label: const Text('Explore Woman'),
+              label: const Text('Women'),
               selected: audience == 'Woman',
               onSelected: (_) => setState(() {
                 audience = 'Woman';

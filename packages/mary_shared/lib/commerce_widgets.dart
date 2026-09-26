@@ -512,7 +512,7 @@ class ProductEditor extends StatefulWidget {
 class _ProductEditorState extends State<ProductEditor> {
   final form = GlobalKey<FormState>();
   late TextEditingController name, price, sale, cost, description, reason;
-  late String category;
+  late String audience, category;
   late bool visible, discount;
   final Set<String> collections = {};
   bool busy = false;
@@ -542,7 +542,8 @@ class _ProductEditorState extends State<ProductEditor> {
     reason = TextEditingController(
       text: p == null ? 'Opening stock' : 'Stock count adjustment',
     );
-    category = p?['category'] ?? 'Dresses';
+    audience = p?['audience'] ?? (p?['category'] == 'Suit' ? 'Men' : 'Woman');
+    category = p?['category'] ?? (audience == 'Men' ? 'Suit' : 'Dresses');
     visible = p == null || p['active'] == 1 || p['active'] == true;
     discount = p?['sale_price'] != null;
     collections.addAll((p?['collections'] as List?)?.cast<String>() ?? []);
@@ -691,6 +692,7 @@ class _ProductEditorState extends State<ProductEditor> {
       await Api.call('product', {
         'id': productId,
         'name': name.text,
+        'audience': audience,
         'category': category,
         'price': regular,
         'sale_price': discounted,
@@ -865,10 +867,30 @@ class _ProductEditorState extends State<ProductEditor> {
                 const SizedBox(height: 24),
                 input(name, 'Product name'),
                 DropdownButtonFormField<String>(
+                  initialValue: audience,
+                  decoration: const InputDecoration(labelText: 'Shop section'),
+                  items: const [
+                    DropdownMenuItem(value: 'Woman', child: Text('Woman')),
+                    DropdownMenuItem(value: 'Men', child: Text('Men')),
+                  ],
+                  onChanged: busy
+                      ? null
+                      : (value) => setState(() {
+                          audience = value!;
+                          final allowed = audience == 'Men'
+                              ? menCategories
+                              : womenCategories;
+                          if (!allowed.contains(category)) {
+                            category = allowed.first;
+                          }
+                        }),
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  key: ValueKey('-'),
                   initialValue: category,
                   decoration: const InputDecoration(labelText: 'Category'),
-                  items: categories
-                      .skip(1)
+                  items: (audience == 'Men' ? menCategories : womenCategories)
                       .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                       .toList(),
                   onChanged: busy ? null : (v) => category = v!,

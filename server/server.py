@@ -12,7 +12,7 @@ PASSWORD = os.environ.get('NYASA_ADMIN_PASSWORD')
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
 SUPABASE_KEY = os.environ.get('SUPABASE_PUBLISHABLE_KEY', '')
 SESSIONS = {}
-CATEGORIES = ['Outfit', 'Topwear', 'Bottomwear', 'Footwear', 'Dresses', 'Shoes', 'Bags', 'Accessories']
+CATEGORIES = ['Outfit', 'Topwear', 'Bottomwear', 'Footwear', 'Dresses', 'Shoes', 'Bags', 'Accessories', 'Suit']
 def connect():
  c=sqlite3.connect(DB,timeout=15); c.row_factory=sqlite3.Row; c.execute('PRAGMA foreign_keys=ON'); return c
 
@@ -27,6 +27,7 @@ def init():
   if 'sale_price' not in columns:c.execute('alter table products add column sale_price INTEGER')
   if 'images' not in columns:c.execute("alter table products add column images TEXT NOT NULL DEFAULT '[]'")
   if 'collections' not in columns:c.execute("alter table products add column collections TEXT NOT NULL DEFAULT '[]'")
+  if 'audience' not in columns:c.execute("alter table products add column audience TEXT NOT NULL DEFAULT 'Woman'")
 
 def product(r,staff=False):
  d=dict(r); d['variants']=json.loads(d['variants']); d['images']=json.loads(d['images']) or [d['image']]; d['collections']=json.loads(d.get('collections') or '[]')
@@ -149,7 +150,11 @@ class Handler(BaseHTTPRequestHandler):
       c.commit();return self.send(200,{'ok':True,'deleted':True})
      for f in ['name','description','category']:
       if not isinstance(d.get(f),str) or not d[f].strip():raise ValueError('Complete all product fields')
+     d['audience'] = d.get('audience') or ('Men' if d.get('category') == 'Suit' else 'Woman')
+     if d['audience'] not in ['Woman','Men']:raise ValueError('Choose Woman or Men')
      if d['category'] not in CATEGORIES:raise ValueError('Choose a category')
+     allowed = ['Suit','Topwear','Bottomwear','Shoes'] if d['audience'] == 'Men' else ['Outfit','Topwear','Bottomwear','Footwear','Dresses','Shoes','Bags','Accessories']
+     if d['category'] not in allowed:raise ValueError('Choose a category for this shop section')
      for f in ['price','cost']:
       if type(d.get(f)) is not int or d[f]<0:raise ValueError('Prices must be positive whole kwacha amounts')
      if not isinstance(d.get('variants'),dict) or not d['variants']:raise ValueError('Add at least one size / colour')
@@ -163,7 +168,7 @@ class Handler(BaseHTTPRequestHandler):
         raise ValueError('Stock changed while you were editing. Reload and try again.')
      sale=d.get('sale_price')
      if sale is not None and (type(sale) is not int or sale<=0 or sale>=d['price']):raise ValueError('Sale price must be greater than zero and lower than the regular price')
-     c.execute('insert or replace into products(id,name,category,price,cost,description,image,variants,active,sale_price,images,collections) values(?,?,?,?,?,?,?,?,?,?,?,?)',(id,d['name'].strip(),d['category'],d['price'],d['cost'],d['description'],images[0],json.dumps(d['variants']),int(bool(d.get('active',True))),sale,json.dumps(images),json.dumps(d.get('collections',[]))))
+     c.execute('insert or replace into products(id,name,audience,category,price,cost,description,image,variants,active,sale_price,images,collections) values(?,?,?,?,?,?,?,?,?,?,?,?,?)',(id,d['name'].strip(),d['audience'],d['category'],d['price'],d['cost'],d['description'],images[0],json.dumps(d['variants']),int(bool(d.get('active',True))),sale,json.dumps(images),json.dumps(d.get('collections',[]))))
      for v,q in d['variants'].items():
       delta=q-before.get(v,0)
       if delta:c.execute("insert into movements(product,variant,delta,reason,created) values(?,?,?,?,datetime('now'))",(id,v,delta,str(d.get('reason','Stock adjustment'))[:300]))

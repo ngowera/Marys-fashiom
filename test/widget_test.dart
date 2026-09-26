@@ -31,14 +31,12 @@ void main() {
       ),
     );
   });
-  testWidgets('Explore Woman is default and Men shows Suit and Shoes', (
-    t,
-  ) async {
+  testWidgets('Women is default and Men shows its four categories', (t) async {
     await t.pumpWidget(const MarysFashionApp());
     await t.pumpAndSettle();
 
     final woman = t.widget<ChoiceChip>(
-      find.widgetWithText(ChoiceChip, 'Explore Woman'),
+      find.widgetWithText(ChoiceChip, 'Women'),
     );
     expect(woman.selected, isTrue);
     expect(find.widgetWithText(ChoiceChip, 'Dresses'), findsOneWidget);
@@ -47,6 +45,8 @@ void main() {
     await t.pumpAndSettle();
 
     expect(find.widgetWithText(ChoiceChip, 'Suit'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Topwear'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Bottomwear'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Shoes'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Dresses'), findsNothing);
   });
