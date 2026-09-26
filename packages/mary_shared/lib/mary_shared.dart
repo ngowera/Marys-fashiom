@@ -1743,9 +1743,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Widget shop(bool wide) {
-    final enabledCategories =
-        (settings['enabled_categories'] as List?)?.cast<String>() ??
-        categories.skip(1).toList();
     final enabledCollections =
         (settings['enabled_collections'] as List?)?.cast<String>() ??
         specialCollections;
@@ -1759,9 +1756,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               ((p['audience'] ?? (p['category'] == 'Suit' ? 'Men' : 'Woman')) ==
                   audience) &&
               activeCategories.contains(p['category']) &&
-              (category == 'All' ||
-                  (enabledCategories.contains(category) &&
-                      p['category'] == category)) &&
+              (category == 'All' || p['category'] == category) &&
               (collection == 'All' ||
                   (enabledCollections.contains(collection) &&
                       ((p['collections'] as List?)?.contains(collection) ??
@@ -1922,12 +1917,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           spacing: 8,
           runSpacing: 8,
           children: ['All', ...activeCategories]
-              .where(
-                (c) =>
-                    c == 'All' ||
-                    enabledCategories.contains(c) ||
-                    audience == 'Men',
-              )
               .map(
                 (c) => ChoiceChip(
                   label: Padding(

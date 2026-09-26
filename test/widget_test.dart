@@ -39,7 +39,14 @@ void main() {
       find.widgetWithText(ChoiceChip, 'Women'),
     );
     expect(woman.selected, isTrue);
+    expect(find.widgetWithText(ChoiceChip, 'Outfit'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Topwear'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Bottomwear'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Footwear'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Dresses'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Shoes'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Bags'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Accessories'), findsOneWidget);
 
     await t.tap(find.widgetWithText(ChoiceChip, 'Men'));
     await t.pumpAndSettle();
