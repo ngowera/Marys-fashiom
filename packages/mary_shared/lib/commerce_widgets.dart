@@ -425,6 +425,33 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
                 'Verified purchase',
                 style: TextStyle(fontSize: 12, color: green),
               ),
+              if ((review['reply_body']?.toString() ?? '').isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffedf4ef),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Mary’s Fashion replied',
+                        style: TextStyle(
+                          color: green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        review['reply_body'],
+                        style: const TextStyle(height: 1.4),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),

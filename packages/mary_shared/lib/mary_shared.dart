@@ -140,6 +140,8 @@ class Api {
           'message-status',
           'reviews',
           'review-submit',
+          'staff-reviews',
+          'review-reply',
         ].contains(path)) {
       throw Exception(
         'Staff Supabase connection is not set up yet. Use the shared API_URL for both apps until migration is complete.',
@@ -167,6 +169,8 @@ class Api {
           'message-status',
           'reviews',
           'review-submit',
+          'staff-reviews',
+          'review-reply',
         ].contains(path)) {
       return _supabaseCall(path, data);
     }
@@ -310,7 +314,7 @@ class Api {
       response = await client
           .get(
             Uri.parse(
-              '$supabaseUrl/rest/v1/product_reviews?select=id,product_id,reviewer_name,rating,body,created_at&product_id=eq.$productId&order=created_at.desc',
+              '$supabaseUrl/rest/v1/product_reviews?select=id,product_id,reviewer_name,rating,body,reply_body,replied_at,created_at&product_id=eq.$productId&order=created_at.desc',
             ),
             headers: headers,
           )
@@ -339,6 +343,43 @@ class Api {
           body is Map
               ? body['message'] ?? 'Unable to save your review.'
               : 'Unable to save your review.',
+        );
+      }
+      return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+    }
+    if (path == 'staff-reviews') {
+      if (token.isEmpty) throw Exception('Staff sign-in required.');
+      response = await client
+          .get(
+            Uri.parse(
+              '$supabaseUrl/rest/v1/product_reviews?select=id,product_id,reviewer_name,rating,body,reply_body,replied_at,created_at&order=created_at.desc',
+            ),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 400) {
+        throw Exception('Unable to load customer reviews.');
+      }
+      return {'reviews': jsonDecode(response.body) as List};
+    }
+    if (path == 'review-reply') {
+      if (token.isEmpty) throw Exception('Staff sign-in required.');
+      response = await client
+          .post(
+            Uri.parse('$supabaseUrl/rest/v1/rpc/staff_reply_product_review'),
+            headers: headers,
+            body: jsonEncode({
+              'p_review_id': data?['review_id'],
+              'p_reply': data?['reply'],
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 400) {
+        final body = jsonDecode(response.body);
+        throw Exception(
+          body is Map
+              ? body['message'] ?? 'Unable to reply to this review.'
+              : 'Unable to reply to this review.',
         );
       }
       return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
@@ -1498,7 +1539,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 if (Api.usesSupabase)
                   IconButton(
                     tooltip: Api.token.isEmpty
-                        ? 'Sign in to messages'
+                        ? 'Message Mary’s Fashion'
                         : 'Messages',
                     onPressed: () async {
                       if (Api.token.isEmpty) {
@@ -1506,16 +1547,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           context: context,
                           builder: (_) => const AccountDialog(),
                         );
-                        if (signedIn == true && mounted) setState(() {});
+                        if (signedIn == true && mounted) {
+                          setState(() => page = 'Messages');
+                        }
                       } else {
                         setState(() => page = 'Messages');
                       }
                     },
-                    icon: Icon(
-                      Api.token.isEmpty
-                          ? Icons.account_circle_outlined
-                          : Icons.mark_chat_unread_outlined,
-                    ),
+                    icon: const Icon(Icons.chat_bubble_outline),
                   ),
                 IconButton(
                   tooltip: 'Favourites',
@@ -2740,7 +2779,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 : page == 'Reports'
                 ? 'Real sales trends, margins and stock health.'
                 : page == 'Messages'
-                ? 'Read and respond to customer conversations.'
+                ? 'Read messages and reviews, then respond to customers.'
                 : page == 'Transactions'
                 ? 'Track PayChangu collections and payment attempts.'
                 : 'Every stock change, with a reason.',
@@ -2751,7 +2790,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               child: TransactionsPanel(data: staffData, reload: load),
             )
           else if (page == 'Messages')
-            SizedBox(height: 650, child: MessagesPanel(reload: load))
+            SizedBox(
+              height: 650,
+              child: MessagesPanel(reload: load, products: products),
+            )
           else if (page == 'Operations')
             OperationsPanel(
               data: staffData,

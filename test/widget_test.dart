@@ -323,6 +323,86 @@ void main() {
       expect(find.text('Subtotal  MWK 28,500'), findsOneWidget);
     });
   }
+  testWidgets('Inventory reviews can receive a public staff reply', (t) async {
+    final oldUrl = Api.supabaseUrl;
+    final oldKey = Api.supabaseKey;
+    final oldToken = Api.token;
+    Api.supabaseUrl = 'https://example.supabase.co';
+    Api.supabaseKey = 'publishable-test-key';
+    Api.token = 'staff-token';
+    addTearDown(() {
+      Api.supabaseUrl = oldUrl;
+      Api.supabaseKey = oldKey;
+      Api.token = oldToken;
+    });
+    String? publishedReply;
+    Api.client = MockClient((request) async {
+      if (request.url.path.endsWith('/rpc/messaging_threads')) {
+        return http.Response('[]', 200);
+      }
+      if (request.url.path.endsWith('/product_reviews')) {
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 7,
+              'product_id': 'D01',
+              'reviewer_name': 'Mary T.',
+              'rating': 5,
+              'body': 'The quality is excellent.',
+              'reply_body': publishedReply,
+              'replied_at': null,
+              'created_at': '2026-09-26T08:00:00Z',
+            },
+          ]),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/rpc/staff_reply_product_review')) {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        publishedReply = body['p_reply'] as String;
+        return http.Response(
+          jsonEncode({'id': body['p_review_id'], 'reply_body': publishedReply}),
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+
+    await t.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 650,
+            child: MessagesPanel(
+              reload: () async {},
+              products: const [
+                {'id': 'D01', 'name': 'Terracotta dress'},
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await t.pumpAndSettle();
+
+    await t.tap(find.text('Reviews (1)'));
+    await t.pumpAndSettle();
+    expect(find.text('Mary T.'), findsOneWidget);
+    expect(find.textContaining('Terracotta dress'), findsOneWidget);
+
+    await t.tap(find.text('Mary T.'));
+    await t.pumpAndSettle();
+    await t.enterText(
+      find.widgetWithText(TextField, 'Public reply from Mary’s Fashion'),
+      'Thank you for your honest feedback.',
+    );
+    await t.tap(find.text('Publish reply'));
+    await t.pumpAndSettle();
+
+    expect(publishedReply, 'Thank you for your honest feedback.');
+    expect(find.text('Update public reply'), findsOneWidget);
+  });
+
   testWidgets('Inventory requires staff sign in', (t) async {
     await t.pumpWidget(const MarysFashionApp(inventory: true));
     await t.pumpAndSettle();

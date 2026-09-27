@@ -176,7 +176,8 @@ class _CustomerMessagesPageState extends State<CustomerMessagesPage> {
           await open(Map<String, dynamic>.from(created as Map));
       }
     } catch (e) {
-      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted)
+        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => sending = false);
     }
@@ -313,18 +314,26 @@ class _CustomerMessagesPageState extends State<CustomerMessagesPage> {
 
 class MessagesPanel extends StatefulWidget {
   final Future<void> Function() reload;
-  const MessagesPanel({super.key, required this.reload});
+  final List<dynamic> products;
+  const MessagesPanel({
+    super.key,
+    required this.reload,
+    this.products = const [],
+  });
+
   @override
   State<MessagesPanel> createState() => _MessagesPanelState();
 }
 
 class _MessagesPanelState extends State<MessagesPanel> {
-  String filter = 'All';
-  List<dynamic> threads = [], messages = [];
-  Map<String, dynamic>? selected;
+  String section = 'Messages', filter = 'All';
+  List<dynamic> threads = [], messages = [], reviews = [];
+  Map<String, dynamic>? selected, selectedReview;
   final composer = TextEditingController();
-  bool sending = false;
-  String error = '';
+  final reviewComposer = TextEditingController();
+  bool sending = false, replyingToReview = false;
+  String error = '', reviewError = '';
+
   @override
   void initState() {
     super.initState();
@@ -334,15 +343,53 @@ class _MessagesPanelState extends State<MessagesPanel> {
   @override
   void dispose() {
     composer.dispose();
+    reviewComposer.dispose();
     super.dispose();
+  }
+
+  String productName(dynamic id) {
+    for (final raw in widget.products) {
+      final product = raw as Map;
+      if (product['id'] == id) return product['name']?.toString() ?? '$id';
+    }
+    return id?.toString() ?? 'Product';
   }
 
   Future<void> load() async {
     try {
       final result = await Api.call('messages', {'staff': true});
-      if (mounted) setState(() { threads = result['threads'] ?? []; error = ''; });
+      if (mounted) {
+        setState(() {
+          threads = result['threads'] ?? [];
+          error = '';
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
+    }
+    try {
+      final result = await Api.call('staff-reviews');
+      if (!mounted) return;
+      final loaded = result['reviews'] as List? ?? [];
+      final selectedId = selectedReview?['id'];
+      setState(() {
+        reviews = loaded;
+        selectedReview = selectedId == null
+            ? selectedReview
+            : loaded
+                  .where((raw) => (raw as Map)['id'] == selectedId)
+                  .map((raw) => Map<String, dynamic>.from(raw as Map))
+                  .firstOrNull;
+        reviewError = '';
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => reviewError = e.toString().replaceFirst('Exception: ', ''),
+        );
+      }
     }
   }
 
@@ -352,9 +399,17 @@ class _MessagesPanelState extends State<MessagesPanel> {
         'thread_id': thread['id'],
       });
       await Api.call('message-read', {'thread_id': thread['id']});
-      if (mounted) setState(() { selected = thread; messages = result['messages'] ?? []; error = ''; });
+      if (mounted) {
+        setState(() {
+          selected = thread;
+          messages = result['messages'] ?? [];
+          error = '';
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     }
   }
 
@@ -370,67 +425,125 @@ class _MessagesPanelState extends State<MessagesPanel> {
       await load();
       await open(selected!);
     } catch (e) {
-      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     } finally {
       if (mounted) setState(() => sending = false);
     }
   }
 
+  void selectReview(Map<String, dynamic> review) {
+    reviewComposer.text = review['reply_body']?.toString() ?? '';
+    setState(() => selectedReview = review);
+  }
+
+  Future<void> replyToReview() async {
+    if (selectedReview == null || reviewComposer.text.trim().isEmpty) return;
+    setState(() {
+      replyingToReview = true;
+      reviewError = '';
+    });
+    try {
+      await Api.call('review-reply', {
+        'review_id': selectedReview!['id'],
+        'reply': reviewComposer.text.trim(),
+      });
+      await load();
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => reviewError = e.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => replyingToReview = false);
+    }
+  }
+
   List<dynamic> get visible => threads.where((raw) {
-    final t = raw as Map;
+    final thread = raw as Map;
     return filter == 'All' ||
-        (filter == 'Unread' && t['unread'] == true) ||
-        t['status'] == filter.toLowerCase();
+        (filter == 'Unread' && thread['unread'] == true) ||
+        thread['status'] == filter.toLowerCase();
   }).toList();
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(children: [
-        Expanded(child: Wrap(spacing: 24, children: [for (final item in ['All', 'Unread', 'Open', 'Closed']) TextButton(onPressed: () => setState(() => filter = item), child: Text(item, style: TextStyle(fontWeight: filter == item ? FontWeight.bold : FontWeight.normal))) ])),
-        IconButton(tooltip: 'Refresh messages', onPressed: load, icon: const Icon(Icons.refresh)),
-      ]),
-      if (error.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(children: [
-            Expanded(child: Text(error, style: const TextStyle(color: Colors.red))),
-            TextButton(onPressed: load, child: const Text('Retry')),
-          ]),
+
+  Widget errorNotice(String message) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(message, style: const TextStyle(color: Colors.red)),
         ),
+        TextButton(onPressed: load, child: const Text('Retry')),
+      ],
+    ),
+  );
+
+  Widget conversationsPanel() => Column(
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Wrap(
+              spacing: 12,
+              children: [
+                for (final item in ['All', 'Unread', 'Open', 'Closed'])
+                  TextButton(
+                    onPressed: () => setState(() => filter = item),
+                    child: Text(
+                      item,
+                      style: TextStyle(
+                        fontWeight: filter == item
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      if (error.isNotEmpty) errorNotice(error),
       const Divider(height: 1),
       Expanded(
         child: Row(
           children: [
             SizedBox(
-              width: 360,
+              width: 340,
               child: ListView(
                 children: [
+                  if (visible.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('No customer messages yet.'),
+                    ),
                   for (final raw in visible)
                     Builder(
                       builder: (_) {
-                        final t = Map<String, dynamic>.from(raw as Map);
+                        final thread = Map<String, dynamic>.from(raw as Map);
                         return ListTile(
-                          selected: selected?['id'] == t['id'],
+                          selected: selected?['id'] == thread['id'],
                           leading: Badge(
-                            isLabelVisible: t['unread'] == true,
+                            isLabelVisible: thread['unread'] == true,
                             child: const CircleAvatar(
                               child: Icon(Icons.person_outline),
                             ),
                           ),
                           title: Text(
-                            t['customer_email'] ?? 'Customer message',
+                            thread['customer_email'] ?? 'Customer message',
                           ),
                           subtitle: Text(
-                            '${t['subject'] ?? 'Conversation'} · ${t['status']}',
+                            '${thread['subject'] ?? 'Conversation'} · ${thread['status']}',
                           ),
-                          trailing: t['unread'] == true
+                          trailing: thread['unread'] == true
                               ? const Icon(
                                   Icons.mark_email_unread_outlined,
                                   color: green,
                                 )
                               : null,
-                          onTap: () => open(t),
+                          onTap: () => open(thread),
                         );
                       },
                     ),
@@ -503,6 +616,7 @@ class _MessagesPanelState extends State<MessagesPanel> {
                                 ),
                               ),
                               IconButton(
+                                tooltip: 'Send message',
                                 onPressed: sending ? null : reply,
                                 icon: const Icon(Icons.send),
                               ),
@@ -514,6 +628,148 @@ class _MessagesPanelState extends State<MessagesPanel> {
             ),
           ],
         ),
+      ),
+    ],
+  );
+
+  Widget reviewsPanel() => Column(
+    children: [
+      const SizedBox(height: 8),
+      if (reviewError.isNotEmpty) errorNotice(reviewError),
+      Expanded(
+        child: Row(
+          children: [
+            SizedBox(
+              width: 340,
+              child: ListView(
+                children: [
+                  if (reviews.isEmpty && reviewError.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('No customer reviews yet.'),
+                    ),
+                  for (final raw in reviews)
+                    Builder(
+                      builder: (_) {
+                        final review = Map<String, dynamic>.from(raw as Map);
+                        return ListTile(
+                          selected: selectedReview?['id'] == review['id'],
+                          leading: CircleAvatar(
+                            child: Text('${review['rating']}★'),
+                          ),
+                          title: Text(review['reviewer_name'] ?? 'Customer'),
+                          subtitle: Text(
+                            '${productName(review['product_id'])} · ${review['reply_body'] == null ? 'Needs reply' : 'Replied'}',
+                          ),
+                          trailing: review['reply_body'] == null
+                              ? const Icon(Icons.reply_outlined, color: green)
+                              : const Icon(Icons.check_circle_outline),
+                          onTap: () => selectReview(review),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              child: selectedReview == null
+                  ? const Center(child: Text('Select a customer review'))
+                  : ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        Text(
+                          productName(selectedReview!['product_id']),
+                          style: const TextStyle(
+                            fontSize: 21,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${selectedReview!['reviewer_name']} · ${List.filled((selectedReview!['rating'] as num).toInt(), '★').join()}',
+                          style: const TextStyle(color: green),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          selectedReview!['body'] ?? '',
+                          style: const TextStyle(fontSize: 16, height: 1.45),
+                        ),
+                        const Divider(height: 36),
+                        TextField(
+                          controller: reviewComposer,
+                          maxLines: 5,
+                          maxLength: 2000,
+                          decoration: const InputDecoration(
+                            labelText: 'Public reply from Mary’s Fashion',
+                            hintText: 'Thank the customer or respond to their feedback.',
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilledButton.icon(
+                            onPressed: replyingToReview ? null : replyToReview,
+                            icon: const Icon(Icons.reply),
+                            label: Text(
+                              replyingToReview
+                                  ? 'Publishing reply…'
+                                  : selectedReview!['reply_body'] == null
+                                  ? 'Publish reply'
+                                  : 'Update public reply',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'This reply will appear publicly beneath the customer’s review on the shop website.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xff697469),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Messages'),
+                  selected: section == 'Messages',
+                  onSelected: (_) => setState(() => section = 'Messages'),
+                ),
+                ChoiceChip(
+                  label: Text('Reviews (${reviews.length})'),
+                  selected: section == 'Reviews',
+                  onSelected: (_) => setState(() => section = 'Reviews'),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Refresh customer communication',
+            onPressed: load,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      Expanded(
+        child: section == 'Reviews' ? reviewsPanel() : conversationsPanel(),
       ),
     ],
   );
