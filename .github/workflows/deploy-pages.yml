@@ -43,7 +43,6 @@ jobs:
         run: >-
           flutter build web
           --release
-          --wasm
           --base-href "/"
           --dart-define=SUPABASE_URL="$SUPABASE_URL"
           --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
@@ -58,7 +57,6 @@ jobs:
         run: >-
           flutter build web
           --release
-          --wasm
           --target lib/main_inventory.dart
           --output build/inventory
           --base-href "/inventory/"
