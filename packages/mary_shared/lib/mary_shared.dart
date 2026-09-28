@@ -306,6 +306,11 @@ class Api {
       'apikey': supabaseKey,
       'Authorization': 'Bearer ${token.isNotEmpty ? token : supabaseKey}',
     };
+    final publicHeaders = {
+      'Content-Type': 'application/json',
+      'apikey': supabaseKey,
+      'Authorization': 'Bearer $supabaseKey',
+    };
     late http.Response response;
     if (path == 'reviews') {
       final productId = Uri.encodeQueryComponent(
@@ -811,13 +816,13 @@ class Api {
         Uri.parse(
           '$supabaseUrl/rest/v1/products?select=id,name,audience,category,regular_price,sale_price,description,images,variants,collections,active,created_at&active=eq.true&order=created_at.asc',
         ),
-        headers: headers,
+        headers: publicHeaders,
       );
       final settingsFuture = client.get(
         Uri.parse(
           '$supabaseUrl/rest/v1/shop_settings?select=standard_delivery_mwk,express_delivery_mwk,delivery_areas,pickup_location,contact,returns_policy,enabled_categories,enabled_collections&limit=1',
         ),
-        headers: headers,
+        headers: publicHeaders,
       );
       final responses = await Future.wait([productsFuture, settingsFuture])
           .timeout(const Duration(seconds: 15));

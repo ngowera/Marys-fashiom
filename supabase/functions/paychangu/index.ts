@@ -166,7 +166,8 @@ Deno.serve(async (request) => {
       const expected = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
       if (signature.toLowerCase() !== expected) return new Response('Invalid signature', { status: 401 });
       const payload = JSON.parse(raw);
-      if (payload.tx_ref) await settle(payload.tx_ref);
+      const txRef = payload.tx_ref ?? payload.data?.tx_ref ?? payload.data?.transaction?.tx_ref;
+      if (txRef) await settle(String(txRef));
       return new Response('ok', { status: 200 });
     }
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
