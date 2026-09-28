@@ -84,6 +84,9 @@ async function storedReturnUrl(txRef: string) {
 }
 
 async function initiate(body: Record<string, unknown>) {
+  if (!publicBaseUrl) {
+    return json({ error: 'Payment service is not configured' }, 503);
+  }
   const orderId = String(body.order_id ?? '');
   const token = String(body.token ?? '');
   const returnUrl = String(body.return_url ?? '');

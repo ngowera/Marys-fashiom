@@ -34,7 +34,7 @@ const womenCategories = [
   'Bags',
   'Accessories',
 ];
-const menCategories = ['Suit', 'Topwear', 'Bottomwear', 'Shoes'];
+const menCategories = ['Suit', 'Topwear', 'Bottomwear', 'Shoes', 'Accessories'];
 const categories = ['All', ...womenCategories, 'Suit'];
 const specialCollections = ['New Arrivals', 'Best Sellers', 'Sale / Clearance'];
 String money(num n) =>
@@ -1190,9 +1190,40 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   Timer? refreshTimer;
   Timer? heroPrimaryTimer;
   Timer? heroSecondaryTimer;
+  Timer? heroCopyTimer;
   int heroPrimaryIndex = 0;
   int heroSecondaryIndex = 1;
   int heroTick = 0;
+  int heroCopyIndex = 0;
+  static const heroMessages = [
+    'A little elegance.\nEvery day.',
+    'Look stunning.\nEverywhere you go.',
+    'Graduate with confidence.\nStep into your future.',
+    'A woman of style.\nA woman of purpose.',
+    'A woman of taste.\nElegance without effort.',
+    'A man of value.\nDressed with intention.',
+    'Own the room.\nWear your confidence.',
+    'Your moment.\nYour style. Your story.',
+    'Dress for the dream.\nArrive ready.',
+    'Celebrate your journey.\nGraduate in style.',
+    'Confidence looks good.\nEspecially on you.',
+    'Make every entrance.\nOne to remember.',
+    'From campus to career.\nStep out with confidence.',
+    'Style that speaks.\nBefore you say a word.',
+    'Class in every detail.\nConfidence in every step.',
+    'Wear the occasion.\nOwn the memory.',
+    'Bold choices.\nBeautiful beginnings.',
+    'For your big day.\nAnd every day after.',
+    'Refined for him.\nRadiant for her.',
+    'More than fashion.\nIt is how you arrive.',
+    'Walk into the meeting.\nReady to lead.',
+    'Office-ready.\nConfidence included.',
+    'Dress for the role.\nLead with presence.',
+    'Make the interview.\nRemember your style.',
+    'Business with elegance.\nPurpose in every detail.',
+    'From desk to dinner.\nStay effortlessly polished.',
+    'Command the room.\nKeep your style.',
+  ];
   bool fetching = false;
   final staffEmail = TextEditingController();
   final staffPassword = TextEditingController();
@@ -1202,6 +1233,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     refreshTimer?.cancel();
     heroPrimaryTimer?.cancel();
     heroSecondaryTimer?.cancel();
+    heroCopyTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     staffEmail.dispose();
     staffPassword.dispose();
@@ -1218,6 +1250,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       refreshTimer?.cancel();
       heroPrimaryTimer?.cancel();
       heroSecondaryTimer?.cancel();
+      heroCopyTimer?.cancel();
     }
   }
 
@@ -1231,7 +1264,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   void startHeroRotation() {
     heroPrimaryTimer?.cancel();
     heroSecondaryTimer?.cancel();
+    heroCopyTimer?.cancel();
     if (widget.inventory) return;
+    heroCopyTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted) return;
+      setState(() {
+        heroCopyIndex = (heroCopyIndex + 1) % heroMessages.length;
+      });
+    });
     heroPrimaryTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       final heroProducts = _heroProducts;
       if (!mounted || heroProducts.isEmpty || busy) return;
@@ -1255,7 +1295,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   final List<Map<String, dynamic>> bag = [];
   final Set<String> saved = {};
   final Set<String> compared = {};
-  String audience = 'Woman',
+  String audience = 'All',
       category = 'All',
       collection = 'All',
       query = '',
@@ -1796,10 +1836,20 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> openContact(String url) async {
+    final opened = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      tell('This contact option could not be opened.');
+    }
+  }
+
   void help() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Shopping with Mary’s'),
         content: SizedBox(
           width: 560,
@@ -1810,39 +1860,85 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               children: [
                 const Text('Size & fit', style: TextStyle(fontSize: 22)),
                 const Text(
-                  'Check the size and colour listed on each product. Sizes differ between styles: ask the shop for garment or shoe measurements before ordering if unsure. Product descriptions include available material and fit details.',
+                  'Before we send your package, contact us on WhatsApp to tell us your true size and preferred colour. We will confirm the size and colour with you before dispatch.',
                 ),
                 const SizedBox(height: 18),
                 const Text(
                   'Delivery & collection',
                   style: TextStyle(fontSize: 22),
                 ),
-                Text(
-                  settings['delivery_areas']?.toString().isNotEmpty == true
-                      ? settings['delivery_areas']
-                      : 'Delivery areas are awaiting confirmation by the shop.',
-                ),
-                Text(
-                  settings['pickup_location']?.toString().isNotEmpty == true
-                      ? 'Pickup: ${settings['pickup_location']}'
-                      : 'Contact the shop to confirm the pickup location.',
+                const Text(
+                  'We send packages using Speed Courier or CTS. When a product includes free delivery, you do not pay a delivery fee. Otherwise, customers normally pay the courier directly when collecting their package.',
                 ),
                 const SizedBox(height: 18),
                 const Text(
                   'Returns & exchanges',
                   style: TextStyle(fontSize: 22),
                 ),
-                Text(
-                  settings['returns_policy']?.toString().isNotEmpty == true
-                      ? settings['returns_policy']
-                      : 'Please confirm return and exchange terms with the shop before purchasing. A final policy has not been published yet.',
+                const Text(
+                  'To request a return or exchange, complete the online form with your purchase ID, reason, supporting product images and contact details. You will receive a reference ID to use when following up.',
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => showDialog(
+                      context: dialogContext,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Return / exchange form'),
+                        content: const Text(
+                          'The online form will be activated after its secure database and image-upload setup is installed. Until then, please contact us by phone, WhatsApp or email below.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    icon: const Icon(Icons.assignment_outlined),
+                    label: const Text('Open the online return / exchange form'),
+                  ),
                 ),
                 const SizedBox(height: 18),
                 const Text('Contact', style: TextStyle(fontSize: 22)),
-                Text(
-                  settings['contact']?.toString().isNotEmpty == true
-                      ? settings['contact']
-                      : 'Shop contact details will appear here once configured.',
+                const Text(
+                  'For any issue, question or assistance, call, message us on WhatsApp or send an email.',
+                ),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => openContact('tel:+265882549277'),
+                      icon: const Icon(Icons.call_outlined),
+                      label: const Text('0882 549 277'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => openContact('tel:+265981094067'),
+                      icon: const Icon(Icons.call_outlined),
+                      label: const Text('+265 981 09 40 67'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () =>
+                          openContact('https://wa.me/265882549277'),
+                      icon: const Icon(Icons.chat_outlined),
+                      label: const Text('WhatsApp 0882 549 277'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () =>
+                          openContact('https://wa.me/265981094067'),
+                      icon: const Icon(Icons.chat_outlined),
+                      label: const Text('WhatsApp +265 981 09 40 67'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => openContact(
+                        'mailto:ngowelak%40gmail.com?subject=Mary%27s%20Fashion%20assistance',
+                      ),
+                      icon: const Icon(Icons.email_outlined),
+                      label: const Text('ngowelak@gmail.com'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1850,7 +1946,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Close'),
           ),
         ],
@@ -1865,13 +1961,17 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         specialCollections;
     final activeCategories = audience == 'Men'
         ? menCategories
-        : womenCategories;
+        : audience == 'Woman'
+        ? womenCategories
+        : categories.skip(1).toList();
     final q = query.trim().toLowerCase();
     var list = products
         .where(
           (p) =>
-              ((p['audience'] ?? (p['category'] == 'Suit' ? 'Men' : 'Woman')) ==
-                  audience) &&
+              (audience == 'All' ||
+                  (p['audience'] ??
+                          (p['category'] == 'Suit' ? 'Men' : 'Woman')) ==
+                      audience) &&
               activeCategories.contains(p['category']) &&
               (category == 'All' || p['category'] == category) &&
               (collection == 'All' ||
@@ -1893,13 +1993,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         )
         .toList();
     if (sort == 'Featured') {
-      list.sort(
-        (a, b) => (b['created_at']?.toString() ?? '').compareTo(
-          a['created_at']?.toString() ?? '',
-        ),
-      );
-      if (list.length > 8) list.removeRange(8, list.length);
-      list.sort((a, b) => (b['price'] as int).compareTo(a['price']));
+      list.sort(_compareFeaturedProducts);
     }
     if (sort == 'Price: low to high') {
       list.sort((a, b) => (a['price'] as int).compareTo(b['price']));
@@ -1946,10 +2040,26 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    'A little elegance.\nEvery day.',
-                    style: Theme.of(context).textTheme.headlineLarge
-                        ?.copyWith(fontSize: wide ? 60 : 40, height: 1.02),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 650),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.12),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                    child: Text(
+                      heroMessages[heroCopyIndex],
+                      key: ValueKey(heroCopyIndex),
+                      style: Theme.of(context).textTheme.headlineLarge
+                          ?.copyWith(fontSize: wide ? 60 : 40, height: 1.02),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   const Text(
@@ -2024,6 +2134,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           spacing: 10,
           runSpacing: 8,
           children: [
+            ChoiceChip(
+              label: const Text('All'),
+              selected: audience == 'All',
+              onSelected: (_) => setState(() {
+                audience = 'All';
+                category = 'All';
+              }),
+            ),
             ChoiceChip(
               label: const Text('Women'),
               selected: audience == 'Woman',
@@ -2356,9 +2474,51 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   ),
                 ],
               ),
+              const SizedBox(height: 22),
+              const Text(
+                'Contact us on',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: green,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => openContact(
+                      'https://wa.me/265981954171?text=Hello%20Mary%27s%20Fashion',
+                    ),
+                    icon: Image.asset(
+                      'assets/images/whatsapp.webp',
+                      package: 'mary_shared',
+                      width: 24,
+                      height: 24,
+                      semanticLabel: 'WhatsApp',
+                    ),
+                    label: const Text('0981 954 171'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => openContact(
+                      'mailto:ngowelak%40gmail.com?subject=Mary%27s%20Fashion%20enquiry',
+                    ),
+                    icon: const Icon(Icons.email_outlined),
+                    label: const Text('ngowelak@gmail.com'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => openContact('tel:+265882549277'),
+                    icon: const Icon(Icons.call_outlined),
+                    label: const Text('0882 549 277'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 18),
               const Text(
-                'Preview collection · Products and delivery rates are illustrative.',
+                'All rights reserved, maryfashion',
                 style: TextStyle(fontSize: 12, color: Color(0xff697469)),
               ),
             ],
@@ -2616,28 +2776,27 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     );
   }
 
-  List<dynamic> get _heroProducts => products.where((product) {
-    final price = product['price'];
-    if (price is! num || price < 50000) return false;
+  int _featuredCategoryRank(dynamic product) {
+    return switch (product['category']) {
+      'Dresses' => 0,
+      'Shoes' || 'Footwear' => 1,
+      'Bags' => 2,
+      'Topwear' => 3,
+      _ => 4,
+    };
+  }
 
-    final category = product['category'];
-    final productAudience =
-        product['audience'] ?? (category == 'Suit' ? 'Men' : 'Woman');
-    if (productAudience == 'Men') {
-      return const ['Suit', 'Topwear', 'Bottomwear'].contains(category);
-    }
-    if (productAudience == 'Woman') {
-      return const [
-        'Outfit',
-        'Topwear',
-        'Bottomwear',
-        'Dresses',
-        'Footwear',
-        'Shoes',
-      ].contains(category);
-    }
-    return false;
-  }).toList();
+  int _compareFeaturedProducts(dynamic a, dynamic b) {
+    final categoryOrder = _featuredCategoryRank(a)
+        .compareTo(_featuredCategoryRank(b));
+    if (categoryOrder != 0) return categoryOrder;
+    return (b['created_at']?.toString() ?? '').compareTo(
+      a['created_at']?.toString() ?? '',
+    );
+  }
+
+  List<dynamic> get _heroProducts =>
+      List<dynamic>.from(products)..sort(_compareFeaturedProducts);
 
   dynamic _heroSecondaryProduct(List<dynamic> heroProducts) {
     final primary = heroProducts[heroPrimaryIndex % heroProducts.length];

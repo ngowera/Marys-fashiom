@@ -12,7 +12,7 @@ Set the Edge Function secrets. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` ar
 supabase secrets set \
   PAYCHANGU_SECRET_KEY="your_paychangu_secret" \
   PAYCHANGU_WEBHOOK_SECRET="your_paychangu_webhook_secret" \
-  PUBLIC_BASE_URL="https://your-shop.example"
+  PUBLIC_BASE_URL="https://marysfashion.afrisoft.store"
 ```
 
 Use the PayChangu values this way:
@@ -32,11 +32,11 @@ supabase functions deploy paychangu --no-verify-jwt
 
 Configure these URLs in the PayChangu dashboard:
 
-- Webhook URL: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/paychangu/webhook`
-- Payment callback URL: generated automatically as `https://YOUR_PROJECT_REF.supabase.co/functions/v1/paychangu/callback`
+- Webhook URL: `https://ywuhtffhqbjxaslbwotn.supabase.co/functions/v1/paychangu/webhook`
+- Payment callback URL: generated automatically as `https://ywuhtffhqbjxaslbwotn.supabase.co/functions/v1/paychangu/callback`
 
 The Flutter website calls:
 
-`https://YOUR_PROJECT_REF.supabase.co/functions/v1/paychangu`
+`https://ywuhtffhqbjxaslbwotn.supabase.co/functions/v1/paychangu`
 
 For a successful payment, the function verifies the transaction with PayChangu before marking the Supabase order `Paid`, writing a payment collection, and allowing the website to show the order's tracking code.

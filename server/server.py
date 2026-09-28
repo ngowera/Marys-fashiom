@@ -153,7 +153,7 @@ class Handler(BaseHTTPRequestHandler):
      d['audience'] = d.get('audience') or ('Men' if d.get('category') == 'Suit' else 'Woman')
      if d['audience'] not in ['Woman','Men']:raise ValueError('Choose Woman or Men')
      if d['category'] not in CATEGORIES:raise ValueError('Choose a category')
-     allowed = ['Suit','Topwear','Bottomwear','Shoes'] if d['audience'] == 'Men' else ['Outfit','Topwear','Bottomwear','Footwear','Dresses','Shoes','Bags','Accessories']
+     allowed = ['Suit','Topwear','Bottomwear','Shoes','Accessories'] if d['audience'] == 'Men' else ['Outfit','Topwear','Bottomwear','Footwear','Dresses','Shoes','Bags','Accessories']
      if d['category'] not in allowed:raise ValueError('Choose a category for this shop section')
      for f in ['price','cost']:
       if type(d.get(f)) is not int or d[f]<0:raise ValueError('Prices must be positive whole kwacha amounts')
