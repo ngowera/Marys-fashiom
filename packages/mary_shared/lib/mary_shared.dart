@@ -1233,17 +1233,19 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     heroSecondaryTimer?.cancel();
     if (widget.inventory) return;
     heroPrimaryTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!mounted || products.isEmpty || busy) return;
+      final heroProducts = _heroProducts;
+      if (!mounted || heroProducts.isEmpty || busy) return;
       setState(() {
         heroTick++;
-        heroPrimaryIndex = (heroPrimaryIndex + 1) % products.length;
+        heroPrimaryIndex = (heroPrimaryIndex + 1) % heroProducts.length;
       });
     });
     heroSecondaryTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (!mounted || products.isEmpty || busy) return;
+      final heroProducts = _heroProducts;
+      if (!mounted || heroProducts.isEmpty || busy) return;
       setState(() {
         heroTick++;
-        heroSecondaryIndex = (heroSecondaryIndex + 1) % products.length;
+        heroSecondaryIndex = (heroSecondaryIndex + 1) % heroProducts.length;
       });
     });
   }
@@ -1412,10 +1414,41 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       ],
     ),
   );
+  Future<void> openWhatsApp() async {
+    final uri = Uri.parse(
+      'https://wa.me/265981954171?text=Hello%20Mary%27s%20Fashion%2C%20I%20would%20like%20to%20ask%20about%20your%20products.',
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
+      tell('WhatsApp could not be opened. Please contact +265 981 954 171.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width > 800;
     return Scaffold(
+      floatingActionButton: widget.inventory
+          ? null
+          : Tooltip(
+              message: 'Chat with us on WhatsApp',
+              child: FloatingActionButton(
+                heroTag: 'whatsapp',
+                onPressed: openWhatsApp,
+                backgroundColor: Colors.white,
+                elevation: 6,
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/images/whatsapp.webp',
+                    package: 'mary_shared',
+                    width: 56,
+                    height: 56,
+                    fit: BoxFit.cover,
+                    semanticLabel: 'Open WhatsApp chat',
+                  ),
+                ),
+              ),
+            ),
       appBar: AppBar(
         toolbarHeight: 86,
         backgroundColor: cream,
@@ -1826,6 +1859,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Widget shop(bool wide) {
+    final heroProducts = _heroProducts;
     final enabledCollections =
         (settings['enabled_collections'] as List?)?.cast<String>() ??
         specialCollections;
@@ -1925,7 +1959,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            if (wide && products.isNotEmpty) ...[
+            if (wide && heroProducts.isNotEmpty) ...[
               const SizedBox(width: 32),
               SizedBox(
                 width: 440,
@@ -1936,7 +1970,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     Expanded(
                       flex: 3,
                       child: _heroTile(
-                        product: products[heroPrimaryIndex % products.length],
+                        product:
+                            heroProducts[heroPrimaryIndex %
+                                heroProducts.length],
                         imageIndex: 0,
                         large: true,
                       ),
@@ -1948,8 +1984,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         children: [
                           Expanded(
                             child: _heroTile(
-                              product: _heroSecondaryProduct(),
-                              imageIndex: _heroSecondaryImageIndex(),
+                              product: _heroSecondaryProduct(heroProducts),
+                              imageIndex: _heroSecondaryImageIndex(
+                                heroProducts,
+                              ),
                               large: false,
                             ),
                           ),
@@ -2578,17 +2616,40 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     );
   }
 
-  dynamic _heroSecondaryProduct() {
-    final primary = products[heroPrimaryIndex % products.length];
+  List<dynamic> get _heroProducts => products.where((product) {
+    final price = product['price'];
+    if (price is! num || price < 50000) return false;
+
+    final category = product['category'];
+    final productAudience =
+        product['audience'] ?? (category == 'Suit' ? 'Men' : 'Woman');
+    if (productAudience == 'Men') {
+      return const ['Suit', 'Topwear', 'Bottomwear'].contains(category);
+    }
+    if (productAudience == 'Woman') {
+      return const [
+        'Outfit',
+        'Topwear',
+        'Bottomwear',
+        'Dresses',
+        'Footwear',
+        'Shoes',
+      ].contains(category);
+    }
+    return false;
+  }).toList();
+
+  dynamic _heroSecondaryProduct(List<dynamic> heroProducts) {
+    final primary = heroProducts[heroPrimaryIndex % heroProducts.length];
     final primaryImages = (primary['images'] as List?) ?? const [];
     if (heroTick % 4 == 3 && primaryImages.length > 1) return primary;
-    return products[heroSecondaryIndex % products.length];
+    return heroProducts[heroSecondaryIndex % heroProducts.length];
   }
 
-  int _heroSecondaryImageIndex() {
-    final product = _heroSecondaryProduct();
+  int _heroSecondaryImageIndex(List<dynamic> heroProducts) {
+    final product = _heroSecondaryProduct(heroProducts);
     final images = (product['images'] as List?) ?? const [];
-    if (product == products[heroPrimaryIndex % products.length] &&
+    if (product == heroProducts[heroPrimaryIndex % heroProducts.length] &&
         images.length > 1) {
       return heroTick ~/ 4 % images.length;
     }
