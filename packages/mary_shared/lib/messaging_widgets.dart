@@ -1,5 +1,29 @@
 part of 'mary_shared.dart';
 
+Widget googleSignInButton({
+  required VoidCallback? onPressed,
+  String label = 'Continue with Google',
+}) => OutlinedButton.icon(
+  onPressed: onPressed,
+  style: OutlinedButton.styleFrom(
+    backgroundColor: Colors.white,
+    foregroundColor: ink,
+    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+    side: const BorderSide(color: Color(0xffc8ccc8)),
+  ),
+  icon: ClipRRect(
+    borderRadius: BorderRadius.circular(4),
+    child: Image.asset(
+      'assets/images/google-logo.jpg',
+      package: 'mary_shared',
+      width: 24,
+      height: 24,
+      fit: BoxFit.cover,
+    ),
+  ),
+  label: Text(label),
+);
+
 class AccountDialog extends StatefulWidget {
   const AccountDialog({super.key});
   @override
@@ -7,32 +31,21 @@ class AccountDialog extends StatefulWidget {
 }
 
 class _AccountDialogState extends State<AccountDialog> {
-  final email = TextEditingController();
-  final password = TextEditingController();
-  bool creating = false, busy = false;
+  bool busy = false;
   String error = '';
-  @override
-  void dispose() {
-    email.dispose();
-    password.dispose();
-    super.dispose();
-  }
 
-  Future<void> submit() async {
+  Future<void> continueWithGoogle() async {
     setState(() {
       busy = true;
       error = '';
     });
     try {
-      if (creating) {
-        await Api.signUp(email.text, password.text);
-      } else {
-        await Api.signIn(email.text, password.text);
-      }
-      if (mounted) Navigator.pop(context, true);
+      final opened = await Api.signInWithGoogle();
+      if (!opened) throw Exception('Unable to open Google sign-in.');
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -40,58 +53,210 @@ class _AccountDialogState extends State<AccountDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(creating ? 'Create your account' : 'Sign in'),
+    title: const Text('Sign in with Google'),
     content: SizedBox(
       width: 420,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            controller: email,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'Email address'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: password,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Password'),
+          const Text(
+            'Use your Google account to track orders, write verified reviews and contact Mary’s Fashion.',
           ),
           if (error.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 12),
               child: Text(error, style: const TextStyle(color: Colors.red)),
             ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: googleSignInButton(
+              onPressed: busy ? null : continueWithGoogle,
+              label: busy ? 'Opening Google…' : 'Continue with Google',
+            ),
+          ),
         ],
       ),
     ),
     actions: [
       TextButton(
-        onPressed: busy ? null : () => setState(() => creating = !creating),
-        child: Text(creating ? 'I already have an account' : 'Create account'),
+        onPressed: busy ? null : () => Navigator.pop(context),
+        child: const Text('Close'),
       ),
-      OutlinedButton.icon(
-        onPressed: busy
-            ? null
-            : () async {
-                try {
-                  await Api.signInWithGoogle();
-                } catch (e) {
-                  if (mounted) setState(() => error = e.toString());
-                }
-              },
-        icon: const Icon(Icons.account_circle_outlined),
-        label: const Text('Continue with Google'),
-      ),
-      FilledButton(
-        onPressed: busy ? null : submit,
-        child: Text(
-          busy
-              ? 'Please wait…'
-              : creating
-              ? 'Create account'
-              : 'Sign in',
+    ],
+  );
+}
+
+class OrderTrackingDialog extends StatefulWidget {
+  const OrderTrackingDialog({super.key});
+  @override
+  State<OrderTrackingDialog> createState() => _OrderTrackingDialogState();
+}
+
+class _OrderTrackingDialogState extends State<OrderTrackingDialog> {
+  final orderReference = TextEditingController();
+  final trackingCode = TextEditingController();
+  List<dynamic> orders = [];
+  Map<String, dynamic>? guestOrder;
+  bool loading = true, checking = false;
+  String error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    loadOrders();
+  }
+
+  @override
+  void dispose() {
+    orderReference.dispose();
+    trackingCode.dispose();
+    super.dispose();
+  }
+
+  Future<void> loadOrders() async {
+    try {
+      final result = await Api.call('my-orders');
+      if (mounted) setState(() => orders = result['orders'] as List? ?? []);
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> lookupGuestOrder() async {
+    if (orderReference.text.trim().isEmpty ||
+        trackingCode.text.trim().isEmpty) {
+      setState(
+        () => error = 'Enter the order reference and private tracking code.',
+      );
+      return;
+    }
+    setState(() {
+      checking = true;
+      error = '';
+    });
+    try {
+      final result = await Api.call('track', {
+        'id': orderReference.text.trim(),
+        'token': trackingCode.text.trim(),
+      });
+      if (mounted) setState(() => guestOrder = result);
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => checking = false);
+    }
+  }
+
+  Widget orderCard(Map<String, dynamic> order) {
+    final items = order['items'] as List? ?? [];
+    final payment = order['payment_status']?.toString();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    order['id']?.toString() ?? 'Order',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text(
+                  order['status']?.toString() ?? 'Placed',
+                  style: const TextStyle(
+                    color: green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${money(order['total'] ?? 0)}${payment == null ? '' : ' · $payment'}',
+            ),
+            Text('Delivery: ${order['delivery'] ?? 'To be confirmed'}'),
+            const Divider(height: 20),
+            for (final item in items)
+              Text(
+                '${item['qty']} × ${item['name']}${item['variant'] == null ? '' : ' · ${item['variant']}'}',
+              ),
+          ],
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Track your orders'),
+    content: SizedBox(
+      width: 560,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Orders placed while signed in with this Google account appear here.',
+            ),
+            const SizedBox(height: 16),
+            if (loading) const Center(child: CircularProgressIndicator()),
+            if (!loading && orders.isEmpty)
+              const Text('No orders are linked to this Google account yet.'),
+            for (final raw in orders)
+              orderCard(Map<String, dynamic>.from(raw as Map)),
+            const Divider(height: 32),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Track an older or guest order'),
+              children: [
+                TextField(
+                  controller: orderReference,
+                  decoration: const InputDecoration(
+                    labelText: 'Order reference',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: trackingCode,
+                  decoration: const InputDecoration(
+                    labelText: 'Private tracking code',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: checking ? null : lookupGuestOrder,
+                    child: Text(checking ? 'Checking…' : 'Check status'),
+                  ),
+                ),
+                if (guestOrder != null) orderCard(guestOrder!),
+              ],
+            ),
+            if (error.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(error, style: const TextStyle(color: Colors.red)),
+              ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Close'),
       ),
     ],
   );

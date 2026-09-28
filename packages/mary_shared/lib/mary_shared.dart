@@ -123,6 +123,7 @@ class Api {
           'products',
           'orders',
           'track',
+          'my-orders',
           'admin',
           'upload',
           'product',
@@ -152,6 +153,7 @@ class Api {
           'products',
           'orders',
           'track',
+          'my-orders',
           'admin',
           'upload',
           'product',
@@ -851,6 +853,25 @@ class Api {
                 },
               },
       };
+    }
+    if (path == 'my-orders') {
+      if (token.isEmpty) throw Exception('Sign in with Google first.');
+      response = await client
+          .post(
+            Uri.parse('$supabaseUrl/rest/v1/rpc/customer_orders'),
+            headers: headers,
+            body: '{}',
+          )
+          .timeout(const Duration(seconds: 15));
+      final decoded = jsonDecode(response.body);
+      if (response.statusCode >= 400) {
+        throw Exception(
+          decoded is Map
+              ? decoded['message'] ?? 'Unable to load your orders.'
+              : 'Unable to load your orders.',
+        );
+      }
+      return {'orders': decoded as List};
     }
     if (path == 'orders' && previewMode) {
       return {
@@ -2905,72 +2926,18 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           v == null || v.trim().isEmpty ? 'Please enter $label' : null,
     ),
   );
-  void track() {
-    final id = TextEditingController(), code = TextEditingController();
-    Map<String, dynamic>? result;
-    String problem = '';
-    bool fetching = false;
-    showDialog(
+  Future<void> track() async {
+    if (Api.token.isEmpty) {
+      await showDialog<bool>(
+        context: context,
+        builder: (_) => const AccountDialog(),
+      );
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
       context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, u) => AlertDialog(
-          title: const Text('Track your order'),
-          content: SizedBox(
-            width: 450,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  field(id, 'Order reference'),
-                  field(code, 'Private tracking code'),
-                  if (problem.isNotEmpty)
-                    Text(problem, style: const TextStyle(color: Colors.red)),
-                  if (result != null) ...[
-                    Text(
-                      result!['status'],
-                      style: const TextStyle(fontSize: 26, color: green),
-                    ),
-                    Text(money(result!['total'])),
-                    for (final line in result!['items'])
-                      Text('${line['qty']} × ${line['name']}'),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text('Close'),
-            ),
-            FilledButton(
-              onPressed: fetching
-                  ? null
-                  : () async {
-                      u(() => fetching = true);
-                      try {
-                        final r = await Api.call('track', {
-                          'id': id.text.trim(),
-                          'token': code.text.trim(),
-                        });
-                        if (c.mounted) {
-                          u(() {
-                            result = r;
-                            problem = '';
-                          });
-                        }
-                      } catch (e) {
-                        if (c.mounted) u(() => problem = e.toString());
-                      } finally {
-                        if (c.mounted) u(() => fetching = false);
-                      }
-                    },
-              child: const Text('Check status'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => const OrderTrackingDialog(),
     );
   }
 
