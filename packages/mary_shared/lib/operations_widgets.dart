@@ -11,6 +11,13 @@ class ShopMemory {
       SharedPreferencesAsync().setString('marysfashion.cart', value);
 }
 
+class CatalogueMemory {
+  static Future<String?> read() =>
+      SharedPreferencesAsync().getString('marysfashion.catalogue');
+  static Future<void> write(String value) =>
+      SharedPreferencesAsync().setString('marysfashion.catalogue', value);
+}
+
 class OperationsPanel extends StatelessWidget {
   final Map<String, dynamic> data;
   final List<dynamic> products, orders;
@@ -575,7 +582,7 @@ Returns: ${money(report['returns_value'] ?? 0)}''';
                     ),
                   )
                 else
-                    SalesTrendChart(points: points),
+                  SalesTrendChart(points: points),
               ],
             ),
           ),
@@ -733,7 +740,12 @@ class SalesTrendChart extends StatelessWidget {
             children: [
               const RotatedBox(
                 quarterTurns: 3,
-                child: Center(child: Text('Revenue (MWK)', style: TextStyle(fontSize: 11, color: Color(0xff697469)))),
+                child: Center(
+                  child: Text(
+                    'Revenue (MWK)',
+                    style: TextStyle(fontSize: 11, color: Color(0xff697469)),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -742,17 +754,31 @@ class SalesTrendChart extends StatelessWidget {
                     SizedBox(
                       height: 260,
                       width: double.infinity,
-                      child: CustomPaint(painter: _SalesLinePainter(sales: sales)),
+                      child: CustomPaint(
+                        painter: _SalesLinePainter(sales: sales),
+                      ),
                     ),
                     Positioned(
                       left: 8,
                       top: 4,
-                      child: Text(money(maximum), style: const TextStyle(fontSize: 10, color: Color(0xff697469))),
+                      child: Text(
+                        money(maximum),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xff697469),
+                        ),
+                      ),
                     ),
                     Positioned(
                       left: 8,
                       bottom: 4,
-                      child: const Text('MWK 0', style: TextStyle(fontSize: 10, color: Color(0xff697469))),
+                      child: const Text(
+                        'MWK 0',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xff697469),
+                        ),
+                      ),
                     ),
                   ],
                 ),

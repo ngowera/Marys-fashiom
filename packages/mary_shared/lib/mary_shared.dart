@@ -1356,6 +1356,25 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         saved.clear();
       }
     }
+    if (!widget.inventory) {
+      try {
+        final cached = await CatalogueMemory.read();
+        if (cached != null && mounted) {
+          final catalogue = jsonDecode(cached) as Map<String, dynamic>;
+          final cachedProducts = catalogue['products'] as List?;
+          if (cachedProducts != null && cachedProducts.isNotEmpty) {
+            setState(() {
+              products = cachedProducts;
+              settings = Map<String, dynamic>.from(
+                catalogue['settings'] as Map? ?? const {},
+              );
+              loading = false;
+            });
+            startHeroRotation();
+          }
+        }
+      } catch (_) {}
+    }
     memoryReady = true;
     if (mounted) await load();
   }
@@ -1406,6 +1425,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         loading = false;
         error = '';
       });
+      if (!widget.inventory) {
+        unawaited(
+          CatalogueMemory.write(
+            jsonEncode({'products': products, 'settings': settings}),
+          ).catchError((Object _) {}),
+        );
+      }
       startHeroRotation();
     } catch (e) {
       if (mounted) {
