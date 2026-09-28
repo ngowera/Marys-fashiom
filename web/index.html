@@ -47,6 +47,22 @@
   </style>
 </head>
 <body>
+  <script>
+    (async () => {
+      if (!('serviceWorker' in navigator)) return;
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      const cacheNames = 'caches' in window ? await caches.keys() : [];
+      if (registrations.length === 0 && cacheNames.length === 0) return;
+      await Promise.all([
+        ...registrations.map((registration) => registration.unregister()),
+        ...cacheNames.map((name) => caches.delete(name)),
+      ]);
+      if (!sessionStorage.getItem('marysfashion-cache-reset')) {
+        sessionStorage.setItem('marysfashion-cache-reset', '1');
+        location.reload();
+      }
+    })();
+  </script>
   <div class="app-loading" aria-live="polite" aria-label="Loading Mary Inventory">
     <div class="app-loading__spinner" aria-hidden="true"></div>
     <div>Loading Mary Inventory…</div>
