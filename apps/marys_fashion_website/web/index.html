@@ -31,8 +31,24 @@
 
   <title>Mary’s Fashion | marysfashion</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { height: 100%; margin: 0; background: #fffaf7; }
+    .app-loading {
+      position: fixed; inset: 0; display: grid; place-content: center; gap: 16px;
+      color: #5d4037; font: 600 16px system-ui, sans-serif; text-align: center;
+    }
+    .app-loading__spinner {
+      width: 34px; height: 34px; margin: auto; border: 3px solid #ead8cf;
+      border-top-color: #8d5b4c; border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
+  <div class="app-loading" aria-live="polite" aria-label="Loading Mary’s Fashion">
+    <div class="app-loading__spinner" aria-hidden="true"></div>
+    <div>Loading Mary’s Fashion…</div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

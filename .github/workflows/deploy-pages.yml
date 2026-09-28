@@ -35,16 +35,6 @@ jobs:
         working-directory: apps/marys_fashion_website
         run: flutter pub get
 
-      - name: Determine site base path
-        id: site
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REPOSITORY#*/}" == "${GITHUB_REPOSITORY_OWNER}.github.io" ]]; then
-            echo "base_path=/" >> "$GITHUB_OUTPUT"
-          else
-            echo "base_path=/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build customer website
         working-directory: apps/marys_fashion_website
         env:
@@ -54,7 +44,7 @@ jobs:
           flutter build web
           --release
           --no-web-resources-cdn
-          --base-href "${{ steps.site.outputs.base_path }}"
+          --base-href "/"
           --dart-define=SUPABASE_URL="$SUPABASE_URL"
           --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
 
@@ -71,7 +61,7 @@ jobs:
           --no-web-resources-cdn
           --target lib/main_inventory.dart
           --output build/inventory
-          --base-href "${{ steps.site.outputs.base_path }}inventory/"
+          --base-href "/inventory/"
           --dart-define=SUPABASE_URL="$SUPABASE_URL"
           --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
 
@@ -81,7 +71,9 @@ jobs:
           cp -a build/inventory/. apps/marys_fashion_website/build/web/inventory/
 
       - name: Prevent Jekyll processing
-        run: touch apps/marys_fashion_website/build/web/.nojekyll
+        run: |
+          touch apps/marys_fashion_website/build/web/.nojekyll
+          echo "marysfashion.afrisoft.store" > apps/marys_fashion_website/build/web/CNAME
 
       - name: Upload website artifact
         uses: actions/upload-pages-artifact@v4

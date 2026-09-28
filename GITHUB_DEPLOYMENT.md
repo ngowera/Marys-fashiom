@@ -14,27 +14,24 @@ the same Supabase data but have separate URLs.
 4. Open **Settings → Pages** and set **Source** to **GitHub Actions**.
 5. Open **Actions → Deploy Marys Fashion website**. Run the workflow if it did not start automatically after the push.
 
-The first default address will be:
+The deployment is configured for the custom domain:
 
 ```text
-https://YOUR-GITHUB-USERNAME.github.io/YOUR-REPOSITORY-NAME/
+https://marysfashion.afrisoft.store/
 ```
 
-The inventory address is the same URL followed by `inventory/`.
-
-For example, a repository named `marys-fashion` owned by `mary` would use
-`https://mary.github.io/marys-fashion/`.
+The inventory address is `https://marysfashion.afrisoft.store/inventory/`.
 
 Every later push to `main` automatically rebuilds and republishes the customer
-website. The workflow calculates the correct base path for both normal project
-repositories and special `USERNAME.github.io` repositories.
+website. Both apps are built with paths rooted at the custom domain so their
+JavaScript and other assets load from the correct URLs.
 
-## Custom domain later
+## Custom domain
 
-Buy or choose the domain first, then add it under **Settings → Pages → Custom
-domain** and follow GitHub's displayed DNS instructions. Do not add a `CNAME`
-file before the exact domain is known. GitHub's default Pages address continues
-to work while a custom domain is being prepared.
+The Pages artifact includes a `CNAME` for `marysfashion.afrisoft.store`. The DNS
+record for that hostname must be a CNAME pointing to `ngowera.github.io`. In
+**Settings → Pages**, keep that same custom domain configured. After GitHub's
+certificate becomes available, enable **Enforce HTTPS**.
 
 Also add the final website URL to the allowed redirect URLs in Supabase if the
 site uses email links, Google sign-in, or another OAuth provider.
