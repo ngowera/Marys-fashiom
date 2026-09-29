@@ -633,7 +633,8 @@ class VariantEntry {
 
 class ProductEditor extends StatefulWidget {
   final Map<String, dynamic>? product;
-  const ProductEditor({super.key, this.product});
+  final List<dynamic> suppliers;
+  const ProductEditor({super.key, this.product, this.suppliers = const []});
   @override
   State<ProductEditor> createState() => _ProductEditorState();
 }
@@ -642,6 +643,7 @@ class _ProductEditorState extends State<ProductEditor> {
   final form = GlobalKey<FormState>();
   late TextEditingController name, price, sale, cost, description, reason;
   late String audience, category;
+  String? supplierId;
   late bool visible, discount;
   final Set<String> collections = {};
   bool busy = false;
@@ -673,6 +675,7 @@ class _ProductEditorState extends State<ProductEditor> {
     );
     audience = p?['audience'] ?? (p?['category'] == 'Suit' ? 'Men' : 'Woman');
     category = p?['category'] ?? (audience == 'Men' ? 'Suit' : 'Dresses');
+    supplierId = p?['supplier_id']?.toString();
     visible = p == null || p['active'] == 1 || p['active'] == true;
     discount = p?['sale_price'] != null;
     collections.addAll((p?['collections'] as List?)?.cast<String>() ?? []);
@@ -826,6 +829,7 @@ class _ProductEditorState extends State<ProductEditor> {
         'price': regular,
         'sale_price': discounted,
         'cost': int.parse(cost.text),
+        'supplier_id': supplierId,
         'description': description.text,
         'image': images.first,
         'images': images,
@@ -1028,6 +1032,36 @@ class _ProductEditorState extends State<ProductEditor> {
                 input(description, 'Description / fit / material'),
                 input(price, 'Regular price (MWK)', number: true),
                 input(cost, 'Unit cost (staff only, MWK)', number: true),
+                DropdownButtonFormField<String?>(
+                  key: ValueKey(
+                    'supplier:$supplierId:${widget.suppliers.length}',
+                  ),
+                  initialValue: supplierId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Supplier (optional, staff only)',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('No supplier assigned'),
+                    ),
+                    ...widget.suppliers.map((raw) {
+                      final supplier = raw as Map;
+                      return DropdownMenuItem<String?>(
+                        value: supplier['id']?.toString(),
+                        child: Text(
+                          '${supplier['name']} • ${supplier['location'] ?? ''}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: busy
+                      ? null
+                      : (value) => setState(() => supplierId = value),
+                ),
+                const SizedBox(height: 14),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Put this product on sale'),

@@ -134,6 +134,7 @@ class Api {
           'shop-settings',
           'status',
           'supplier',
+          'supplier-update',
           'stock-event',
           'return',
           'collection',
@@ -164,6 +165,7 @@ class Api {
           'shop-settings',
           'status',
           'supplier',
+          'supplier-update',
           'stock-event',
           'return',
           'collection',
@@ -451,7 +453,7 @@ class Api {
         ),
         client.get(
           Uri.parse(
-            '$supabaseUrl/rest/v1/order_items?select=id,order_id,product_id,product_name,variant,quantity,unit_price,regular_price,unit_cost&order=id.asc',
+            '$supabaseUrl/rest/v1/order_items?select=id,order_id,product_id,product_name,variant,quantity,unit_price,regular_price,unit_cost,supplier_id&order=id.asc',
           ),
           headers: headers,
         ),
@@ -475,13 +477,19 @@ class Api {
         ),
         client.get(
           Uri.parse(
-            '$supabaseUrl/rest/v1/suppliers?select=id,name,contact,notes,created_at&order=name.asc',
+            '$supabaseUrl/rest/v1/suppliers?select=id,name,contact,phone,location,notes,created_at&order=name.asc',
           ),
           headers: headers,
         ),
         client.get(
           Uri.parse(
             '$supabaseUrl/rest/v1/payment_transactions?select=tx_ref,order_id,amount,currency,status,provider_reference,payment_method,channel,provider_type,provider_mode,provider_charges,completed_at,created_at,updated_at&order=created_at.desc',
+          ),
+          headers: headers,
+        ),
+        client.get(
+          Uri.parse(
+            '$supabaseUrl/rest/v1/product_suppliers?select=product_id,supplier_id',
           ),
           headers: headers,
         ),
@@ -500,6 +508,13 @@ class Api {
       final transactionRows = responses[8].statusCode < 400
           ? jsonDecode(responses[8].body) as List
           : <dynamic>[];
+      final productSupplierRows = responses[9].statusCode < 400
+          ? jsonDecode(responses[9].body) as List
+          : <dynamic>[];
+      final supplierByProduct = {
+        for (final raw in productSupplierRows)
+          (raw as Map)['product_id']: raw['supplier_id'],
+      };
       final orders = orderRows.map((row) {
         final order = Map<String, dynamic>.from(row as Map);
         order['payment'] = order['payment_status'];
@@ -533,6 +548,7 @@ class Api {
         'products': rows.map((row) {
           final p = Map<String, dynamic>.from(row as Map);
           final regular = p.remove('regular_price') as int;
+          p['supplier_id'] = supplierByProduct[p['id']];
           p['cost'] = p.remove('unit_cost') ?? 0;
           p['regular_price'] = regular;
           p['price'] = p['sale_price'] ?? regular;
@@ -848,6 +864,31 @@ class Api {
           .timeout(const Duration(seconds: 15));
       if (response.statusCode >= 400) {
         throw Exception('Unable to publish this product to Supabase.');
+      }
+      final supplierId = data['supplier_id']?.toString();
+      final supplierUri = Uri.parse(
+        '$supabaseUrl/rest/v1/product_suppliers?product_id=eq.${Uri.encodeQueryComponent(data['id'].toString())}',
+      );
+      if (supplierId == null || supplierId.isEmpty) {
+        response = await client.delete(supplierUri, headers: headers);
+      } else {
+        response = await client.post(
+          Uri.parse('$supabaseUrl/rest/v1/product_suppliers'),
+          headers: {
+            ...headers,
+            'Prefer': 'resolution=merge-duplicates,return=minimal',
+          },
+          body: jsonEncode({
+            'product_id': data['id'],
+            'supplier_id': supplierId,
+            'assigned_at': DateTime.now().toUtc().toIso8601String(),
+          }),
+        );
+      }
+      if (response.statusCode >= 400) {
+        throw Exception(
+          'Product saved, but its supplier could not be updated.',
+        );
       }
       return {'ok': true};
     }
@@ -3350,6 +3391,27 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     );
   }
 
+  Map<String, dynamic>? supplierById(dynamic id) {
+    if (id == null) return null;
+    final suppliers = staffData['suppliers'] as List? ?? const [];
+    final match = suppliers
+        .where((raw) => (raw as Map)['id'] == id)
+        .firstOrNull;
+    return match == null ? null : Map<String, dynamic>.from(match as Map);
+  }
+
+  String supplierName(dynamic id) =>
+      supplierById(id)?['name']?.toString() ?? 'Supplier';
+
+  String supplierPhone(Map supplier) =>
+      (supplier['phone'] ?? supplier['contact'] ?? '').toString();
+
+  String whatsAppNumber(String phone) {
+    var digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.startsWith('0')) digits = '265${digits.substring(1)}';
+    return digits;
+  }
+
   Widget inventory() {
     if (Api.token.isEmpty) {
       final email = staffEmail;
@@ -3520,7 +3582,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   leading: SizedBox(width: 56, height: 64, child: photo(p)),
                   title: Text(p['name']),
                   subtitle: Text(
-                    '${p['id']}  •  ${p['category']}  •  ${money(p['price'])}\n${stock(p)} in stock${p['active'] == 0 ? ' • Hidden from shop' : ''}',
+                    '${p['id']}  •  ${p['category']}  •  ${money(p['price'])}\n${stock(p)} in stock${p['active'] == 0 ? ' • Hidden from shop' : ''}${p['supplier_id'] == null ? '' : ' • ${supplierName(p['supplier_id'])}'}',
                     style: const TextStyle(fontSize: 14),
                   ),
                   isThreeLine: true,
@@ -3572,7 +3634,71 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       Text('${o['delivery']}: ${o['address']}'),
                       const SizedBox(height: 10),
                       for (final l in o['items'])
-                        Text('${l['qty']} × ${l['name']} • ${l['variant']}'),
+                        Builder(
+                          builder: (_) {
+                            final supplier = supplierById(l['supplier_id']);
+                            return Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xfff4f6f2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${l['qty']} × ${l['name']} • ${l['variant']}',
+                                  ),
+                                  if (supplier == null)
+                                    const Text(
+                                      'No supplier assigned',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xff697469),
+                                      ),
+                                    )
+                                  else ...[
+                                    Text(
+                                      'Supplier: ${supplier['name']} • ${supplier['location'] ?? ''}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Wrap(
+                                      spacing: 6,
+                                      children: [
+                                        TextButton.icon(
+                                          onPressed: () => openContact(
+                                            'tel:${supplierPhone(supplier)}',
+                                          ),
+                                          icon: const Icon(
+                                            Icons.call_outlined,
+                                            size: 18,
+                                          ),
+                                          label: Text(supplierPhone(supplier)),
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: () => openContact(
+                                            'https://wa.me/${whatsAppNumber(supplierPhone(supplier))}?text=${Uri.encodeQueryComponent('Hello ${supplier['name']}, an item supplied by you has been ordered from Mary’s Fashion: ${l['name']} (${l['variant']}).')}',
+                                          ),
+                                          icon: const Icon(
+                                            Icons.chat_outlined,
+                                            size: 18,
+                                          ),
+                                          label: const Text(
+                                            'WhatsApp supplier',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       const SizedBox(height: 12),
                       Text(
                         '${money(o['total'])} • ${o['payment']}',
@@ -3695,6 +3821,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       barrierDismissible: false,
       builder: (_) => ProductEditor(
         product: p == null ? null : Map<String, dynamic>.from(p),
+        suppliers: staffData['suppliers'] as List? ?? const [],
       ),
     );
     if (changed == true) {

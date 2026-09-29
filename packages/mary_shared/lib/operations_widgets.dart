@@ -1,5 +1,11 @@
 part of 'mary_shared.dart';
 
+String _supplierWhatsAppNumber(dynamic value) {
+  var digits = value?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '';
+  if (digits.startsWith('0')) digits = '265${digits.substring(1)}';
+  return digits;
+}
+
 class ShopMemory {
   static Future<String?> Function()? readOverride;
   static Future<void> Function(String)? writeOverride;
@@ -83,7 +89,42 @@ class OperationsPanel extends StatelessWidget {
         Card(
           child: ListTile(
             title: Text(s['name']),
-            subtitle: Text('${s['contact']}\n${s['notes']}'),
+            subtitle: Text(
+              '${s['phone'] ?? s['contact']} • ${s['location'] ?? ''}\n${s['notes']}',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'WhatsApp supplier',
+                  onPressed: () => launchUrl(
+                    Uri.parse(
+                      'https://wa.me/${_supplierWhatsAppNumber(s['phone'] ?? s['contact'])}',
+                    ),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                  icon: const Icon(Icons.chat_outlined),
+                ),
+                IconButton(
+                  tooltip: 'Edit supplier',
+                  onPressed: () async {
+                    final changed = await showDialog<bool>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (_) => StaffOperationDialog(
+                        kind: 'Supplier',
+                        products: products,
+                        suppliers: data['suppliers'] ?? [],
+                        orders: orders,
+                        supplier: Map<String, dynamic>.from(s as Map),
+                      ),
+                    );
+                    if (changed == true) await reload();
+                  },
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+              ],
+            ),
           ),
         ),
       const SizedBox(height: 24),
@@ -107,12 +148,14 @@ class OperationsPanel extends StatelessWidget {
 class StaffOperationDialog extends StatefulWidget {
   final String kind;
   final List<dynamic> products, suppliers, orders;
+  final Map<String, dynamic>? supplier;
   const StaffOperationDialog({
     super.key,
     required this.kind,
     required this.products,
     required this.suppliers,
     required this.orders,
+    this.supplier,
   });
   @override
   State<StaffOperationDialog> createState() => _StaffOperationDialogState();
@@ -122,6 +165,7 @@ class _StaffOperationDialogState extends State<StaffOperationDialog> {
   final form = GlobalKey<FormState>();
   final name = TextEditingController(),
       contact = TextEditingController(),
+      location = TextEditingController(),
       notes = TextEditingController(),
       quantity = TextEditingController(text: '1'),
       reference = TextEditingController(),
@@ -131,11 +175,32 @@ class _StaffOperationDialogState extends State<StaffOperationDialog> {
     (_) => Random.secure().nextInt(16).toRadixString(16),
   ).join();
   String? productId, variant, supplierId, orderId;
+  @override
+  void initState() {
+    super.initState();
+    final supplier = widget.supplier;
+    if (supplier != null) {
+      name.text = supplier['name']?.toString() ?? '';
+      contact.text = (supplier['phone'] ?? supplier['contact'] ?? '')
+          .toString();
+      location.text = supplier['location']?.toString() ?? '';
+      notes.text = supplier['notes']?.toString() ?? '';
+    }
+  }
+
   bool restock = false, busy = false;
   String error = '';
   @override
   void dispose() {
-    for (final c in [name, contact, notes, quantity, reference, reason]) {
+    for (final c in [
+      name,
+      contact,
+      location,
+      notes,
+      quantity,
+      reference,
+      reason,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -194,7 +259,7 @@ class _StaffOperationDialogState extends State<StaffOperationDialog> {
     try {
       final kind = widget.kind;
       final path = {
-        'Supplier': 'supplier',
+        'Supplier': widget.supplier == null ? 'supplier' : 'supplier-update',
         'Receive': 'stock-event',
         'Damaged': 'stock-event',
         'Return': 'return',
@@ -203,8 +268,11 @@ class _StaffOperationDialogState extends State<StaffOperationDialog> {
       await Api.call(path, {
         'key': keyValue,
         'kind': kind,
+        'id': widget.supplier?['id'],
         'name': name.text,
         'contact': contact.text,
+        'phone': contact.text,
+        'location': location.text,
         'notes': notes.text,
         'product': productId,
         'variant': variant,
@@ -247,7 +315,9 @@ class _StaffOperationDialogState extends State<StaffOperationDialog> {
       child: AlertDialog(
         title: Text(
           {
-            'Supplier': 'Add supplier',
+            'Supplier': widget.supplier == null
+                ? 'Add supplier'
+                : 'Edit supplier',
             'Receive': 'Receive stock',
             'Damaged': 'Record damaged stock',
             'Return': 'Record customer return',
@@ -265,7 +335,8 @@ class _StaffOperationDialogState extends State<StaffOperationDialog> {
                 children: [
                   if (kind == 'Supplier') ...[
                     input(name, 'Supplier name'),
-                    input(contact, 'Contact / phone'),
+                    input(contact, 'Phone number'),
+                    input(location, 'Where they stay / business location'),
                     input(notes, 'Notes', required: false),
                   ] else ...[
                     if (kind == 'Return' || kind == 'Collection') ...[
