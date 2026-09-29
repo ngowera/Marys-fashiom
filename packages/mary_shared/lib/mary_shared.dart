@@ -25,6 +25,7 @@ const ink = Color(0xff22251f),
     green = Color(0xff264d3d),
     cream = Color(0xfff7f7f2);
 const womenCategories = [
+  'Suit',
   'Outfit',
   'Topwear',
   'Bottomwear',
@@ -35,7 +36,7 @@ const womenCategories = [
   'Accessories',
 ];
 const menCategories = ['Suit', 'Topwear', 'Bottomwear', 'Shoes', 'Accessories'];
-const categories = ['All', ...womenCategories, 'Suit'];
+const categories = ['All', ...womenCategories];
 const specialCollections = ['New Arrivals', 'Best Sellers', 'Sale / Clearance'];
 String money(num n) =>
     'MWK ${n.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
