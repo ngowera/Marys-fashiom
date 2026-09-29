@@ -5,6 +5,23 @@ const webhookSecret = Deno.env.get('PAYCHANGU_WEBHOOK_SECRET')!;
 const publicBaseUrl = (Deno.env.get('PUBLIC_BASE_URL') ?? '').replace(/\/$/, '');
 const paychanguApi = 'https://api.paychangu.com';
 
+const trustedReturnOrigins = new Set([
+  'https://marysfashion.afrisoft.store',
+  'https://www.marysfashion.afrisoft.store',
+  ...publicBaseUrl.split(',').map((value) => value.trim()).filter(Boolean).map((value) => {
+    try { return new URL(value).origin; } catch { return ''; }
+  }).filter(Boolean),
+]);
+
+function isTrustedReturnUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && trustedReturnOrigins.has(url.origin);
+  } catch {
+    return false;
+  }
+}
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
@@ -90,7 +107,7 @@ async function initiate(body: Record<string, unknown>) {
   const orderId = String(body.order_id ?? '');
   const token = String(body.token ?? '');
   const returnUrl = String(body.return_url ?? '');
-  if (!orderId || !token || !returnUrl || !returnUrl.startsWith(publicBaseUrl)) {
+  if (!orderId || !token || !isTrustedReturnUrl(returnUrl)) {
     return json({ error: 'Invalid payment session' }, 400);
   }
   const txRef = `MF-${crypto.randomUUID()}`;

@@ -906,6 +906,12 @@ class _MessagesPanelState extends State<MessagesPanel> {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      const Text(
+        'Customer inbox',
+        style: TextStyle(fontFamily: 'BrandSerif', fontSize: 30),
+      ),
+      const Text('Website messages and product reviews arrive here.'),
+      const SizedBox(height: 12),
       Row(
         children: [
           Expanded(
@@ -913,7 +919,7 @@ class _MessagesPanelState extends State<MessagesPanel> {
               spacing: 8,
               children: [
                 ChoiceChip(
-                  label: const Text('Messages'),
+                  label: Text('Customer messages (${threads.length})'),
                   selected: section == 'Messages',
                   onSelected: (_) => setState(() => section = 'Messages'),
                 ),

@@ -94,6 +94,9 @@ class Api {
   static String refreshToken = '';
   static String userEmail = '';
   static String userId = '';
+  static String userName = '';
+  static String userAvatar = '';
+  static String userJoinedAt = '';
   static http.Client client = http.Client();
   static String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static String supabaseKey = String.fromEnvironment(
@@ -254,6 +257,9 @@ class Api {
     refreshToken = '';
     userEmail = '';
     userId = '';
+    userName = '';
+    userAvatar = '';
+    userJoinedAt = '';
   }
 
   static Future<bool> signInWithGoogle() async {
@@ -283,9 +289,40 @@ class Api {
           ),
         );
         userId = payload['sub']?.toString() ?? '';
+        userEmail = payload['email']?.toString() ?? 'Google account';
+        final metadata = Map<String, dynamic>.from(
+          payload['user_metadata'] as Map? ?? const {},
+        );
+        userName = (metadata['full_name'] ?? metadata['name'] ?? '').toString();
+        userAvatar = (metadata['avatar_url'] ?? metadata['picture'] ?? '')
+            .toString();
       } catch (_) {}
-      userEmail = 'Google account';
+      unawaited(loadCurrentUserProfile());
     }
+  }
+
+  static Future<void> loadCurrentUserProfile() async {
+    if (!usesSupabase || token.isEmpty) return;
+    try {
+      final response = await client
+          .get(
+            Uri.parse('$supabaseUrl/auth/v1/user'),
+            headers: {'apikey': supabaseKey, 'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 400) return;
+      final user = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      final metadata = Map<String, dynamic>.from(
+        user['user_metadata'] as Map? ?? const {},
+      );
+      userId = user['id']?.toString() ?? userId;
+      userEmail = user['email']?.toString() ?? userEmail;
+      userName = (metadata['full_name'] ?? metadata['name'] ?? userName)
+          .toString();
+      userAvatar = (metadata['avatar_url'] ?? metadata['picture'] ?? userAvatar)
+          .toString();
+      userJoinedAt = user['created_at']?.toString() ?? '';
+    } catch (_) {}
   }
 
   static Future<void> _loadSupabaseConfig() async {
@@ -854,6 +891,20 @@ class Api {
               },
       };
     }
+    if (path == 'my-reviews') {
+      if (token.isEmpty) throw Exception('Sign in with Google first.');
+      response = await client
+          .post(
+            Uri.parse('$supabaseUrl/rest/v1/rpc/customer_review_history'),
+            headers: headers,
+            body: '{}',
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 400) {
+        throw Exception('Unable to load your reviews.');
+      }
+      return {'reviews': jsonDecode(response.body) as List};
+    }
     if (path == 'my-orders') {
       if (token.isEmpty) throw Exception('Sign in with Google first.');
       response = await client
@@ -1329,6 +1380,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       page = 'Shop',
       error = '';
   bool loading = true, onlySaved = false, busy = false;
+  bool mobileSearchOpen = false;
   Map<String, dynamic>? confirmation;
   String checkoutKey = '';
   Map<String, dynamic> staffData = {}, settings = {};
@@ -1506,6 +1558,148 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       ],
     ),
   );
+  Future<void> openCustomerMessages() async {
+    if (Api.token.isEmpty) {
+      final signedIn = await showDialog<bool>(
+        context: context,
+        builder: (_) => const AccountDialog(),
+      );
+      if (signedIn != true || !mounted) return;
+    }
+    setState(() => page = 'Messages');
+  }
+
+  Future<void> showCustomerProfile() async {
+    await Api.loadCurrentUserProfile();
+    List<dynamic> customerOrders = [];
+    List<dynamic> customerReviews = [];
+    try {
+      final results = await Future.wait([
+        Api.call('my-orders'),
+        Api.call('my-reviews'),
+      ]);
+      customerOrders = results.first['orders'] as List? ?? [];
+      customerReviews = results.last['reviews'] as List? ?? [];
+    } catch (e) {
+      if (mounted) tell(e);
+    }
+    if (!mounted) return;
+    final joined = DateTime.tryParse(Api.userJoinedAt);
+    final totalItems = customerOrders.fold<int>(
+      0,
+      (total, raw) =>
+          total +
+          ((raw as Map)['items'] as List? ?? const []).fold<int>(
+            0,
+            (count, item) =>
+                count + (((item as Map)['quantity'] as num?)?.toInt() ?? 0),
+          ),
+    );
+    final stars = customerReviews.isEmpty
+        ? 0.0
+        : customerReviews.fold<num>(
+                0,
+                (total, raw) => total + ((raw as Map)['rating'] as num? ?? 0),
+              ) /
+              customerReviews.length;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Your Mary’s Fashion profile'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: CircleAvatar(
+                    radius: 36,
+                    backgroundImage: Api.userAvatar.isNotEmpty
+                        ? NetworkImage(Api.userAvatar)
+                        : null,
+                    child: Api.userAvatar.isEmpty
+                        ? const Icon(Icons.person, size: 36)
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: Text(
+                    Api.userName.isEmpty ? Api.userEmail : Api.userName,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Center(child: Text(Api.userEmail)),
+                const Divider(height: 28),
+                Text('Customer ID: ${Api.userId}'),
+                if (joined != null)
+                  Text('Joined: ${joined.day}/${joined.month}/${joined.year}'),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(label: Text('${customerOrders.length} orders')),
+                    Chip(label: Text('$totalItems items bought')),
+                    Chip(label: Text('${customerReviews.length} reviews')),
+                    if (customerReviews.isNotEmpty)
+                      Chip(
+                        label: Text('${stars.toStringAsFixed(1)} ★ average'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Recent purchases',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                if (customerOrders.isEmpty)
+                  const Text('No purchases linked to this Google account yet.'),
+                for (final raw in customerOrders.take(5))
+                  Builder(
+                    builder: (_) {
+                      final order = raw as Map;
+                      final date = DateTime.tryParse(
+                        order['created_at']?.toString() ?? '',
+                      );
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.shopping_bag_outlined),
+                        title: Text('Order ${order['id']}'),
+                        subtitle: Text(
+                          '${order['status']} · ${date == null ? '' : '${date.day}/${date.month}/${date.year}'}',
+                        ),
+                        trailing: Text(money(order['total'] as num? ?? 0)),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Api.signOut();
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              if (mounted) setState(() {});
+            },
+            child: const Text('Sign out'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> openWhatsApp() async {
     final uri = Uri.parse(
       'https://wa.me/265981954171?text=Hello%20Mary%27s%20Fashion%2C%20I%20would%20like%20to%20ask%20about%20your%20products.',
@@ -1522,36 +1716,64 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     return Scaffold(
       floatingActionButton: widget.inventory
           ? null
-          : Tooltip(
-              message: 'Chat with us on WhatsApp',
-              child: FloatingActionButton(
-                heroTag: 'whatsapp',
-                onPressed: openWhatsApp,
-                backgroundColor: Colors.white,
-                elevation: 6,
-                child: ClipOval(
-                  child: Image.asset(
-                    'assets/images/whatsapp.webp',
-                    package: 'mary_shared',
-                    width: 56,
-                    height: 56,
-                    fit: BoxFit.cover,
-                    semanticLabel: 'Open WhatsApp chat',
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (Api.token.isNotEmpty) ...[
+                  Tooltip(
+                    message: 'Your Mary’s Fashion profile',
+                    child: FloatingActionButton.small(
+                      heroTag: 'customer-profile',
+                      onPressed: showCustomerProfile,
+                      backgroundColor: Colors.white,
+                      child: Api.userAvatar.isNotEmpty
+                          ? ClipOval(
+                              child: Image.network(
+                                Api.userAvatar,
+                                width: 40,
+                                height: 40,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    const Icon(Icons.person),
+                              ),
+                            )
+                          : const Icon(Icons.person, color: green),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                Tooltip(
+                  message: 'Chat with us on WhatsApp',
+                  child: FloatingActionButton(
+                    heroTag: 'whatsapp',
+                    onPressed: openWhatsApp,
+                    backgroundColor: Colors.white,
+                    elevation: 6,
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/whatsapp.webp',
+                        package: 'mary_shared',
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                        semanticLabel: 'Open WhatsApp chat',
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
       appBar: AppBar(
         toolbarHeight: 86,
         backgroundColor: cream,
-        titleSpacing: wide ? 36 : 18,
+        titleSpacing: wide ? 36 : 8,
         title: Row(
           children: [
             Image.asset(
               'assets/images/nyasa-threads-logo.png',
               package: 'mary_shared',
-              width: wide ? 56 : 48,
-              height: wide ? 56 : 48,
+              width: wide ? 56 : 38,
+              height: wide ? 56 : 38,
               semanticLabel: 'Mary’s Fashion thread logo',
             ),
             const SizedBox(width: 9),
@@ -1564,7 +1786,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     widget.inventory ? 'Mary Inventory' : 'Mary’s',
                     style: TextStyle(
                       fontFamily: 'BrandSerif',
-                      fontSize: wide ? 36 : 27,
+                      fontSize: wide ? 36 : 22,
                       height: 1.0,
                     ),
                   ),
@@ -1572,8 +1794,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   Text(
                     widget.inventory ? 'STOCK & PRODUCTS' : 'FASHION',
                     style: TextStyle(
-                      fontSize: wide ? 12 : 10,
-                      letterSpacing: 3.2,
+                      fontSize: wide ? 12 : 8,
+                      letterSpacing: wide ? 3.2 : 2.2,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1657,32 +1879,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   isLabelVisible: count > 0,
                   child: IconButton(
                     tooltip: 'Shopping cart',
+                    visualDensity: wide ? null : VisualDensity.compact,
                     onPressed: () => setState(() => page = 'Cart'),
                     icon: const Icon(Icons.shopping_cart_outlined),
                   ),
                 ),
-                if (Api.usesSupabase)
-                  IconButton(
-                    tooltip: Api.token.isEmpty
-                        ? 'Message Mary’s Fashion'
-                        : 'Messages',
-                    onPressed: () async {
-                      if (Api.token.isEmpty) {
-                        final signedIn = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => const AccountDialog(),
-                        );
-                        if (signedIn == true && mounted) {
-                          setState(() => page = 'Messages');
-                        }
-                      } else {
-                        setState(() => page = 'Messages');
-                      }
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline),
-                  ),
                 IconButton(
                   tooltip: 'Favourites',
+                  visualDensity: wide ? null : VisualDensity.compact,
                   onPressed: () => setState(() {
                     page = 'Shop';
                     onlySaved = !onlySaved;
@@ -1692,14 +1896,51 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     color: onlySaved ? Colors.red : ink,
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: IconButton(
-                    tooltip: 'Track an order',
-                    onPressed: track,
-                    icon: const Icon(Icons.location_on_outlined),
+                if (wide && Api.usesSupabase)
+                  IconButton(
+                    tooltip: Api.token.isEmpty
+                        ? 'Message Mary’s Fashion'
+                        : 'Messages',
+                    onPressed: openCustomerMessages,
+                    icon: const Icon(Icons.chat_bubble_outline),
                   ),
-                ),
+                if (wide)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: IconButton(
+                      tooltip: 'Track an order',
+                      onPressed: track,
+                      icon: const Icon(Icons.location_on_outlined),
+                    ),
+                  ),
+                if (!wide)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Menu',
+                      icon: const Icon(Icons.menu),
+                      onSelected: (item) {
+                        if (item == 'Messages') openCustomerMessages();
+                        if (item == 'Track order') track();
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'Messages',
+                          child: ListTile(
+                            leading: Icon(Icons.chat_bubble_outline),
+                            title: Text('Messages'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'Track order',
+                          child: ListTile(
+                            leading: Icon(Icons.location_on_outlined),
+                            title: Text('Track order'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
       ),
       body: loading
@@ -2006,6 +2247,41 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     );
   }
 
+  Widget _mobileFilter<T>({
+    required String label,
+    required T value,
+    required Map<T, String> values,
+    required ValueChanged<T> onChanged,
+  }) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: PopupMenuButton<T>(
+      initialValue: value,
+      onSelected: onChanged,
+      itemBuilder: (_) => values.entries
+          .map(
+            (entry) =>
+                PopupMenuItem<T>(value: entry.key, child: Text(entry.value)),
+          )
+          .toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: const Color(0xffbdc8bf)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label),
+            const SizedBox(width: 6),
+            const Icon(Icons.keyboard_arrow_down, size: 18),
+          ],
+        ),
+      ),
+    ),
+  );
+
   Widget shop(bool wide) {
     final heroProducts = _heroProducts;
     final enabledCollections =
@@ -2056,233 +2332,318 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: help,
-            icon: const Icon(Icons.help_outline),
-            label: const Text('Size, delivery & returns'),
-          ),
-        ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          color: green,
-          child: const Text(
-            'MARY’S FASHION  ·  Dresses, shoes & finishing touches  ·  MWK',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontSize: 14),
-          ),
-        ),
-        const SizedBox(height: 28),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'THE MARY’S EDIT',
-                    style: TextStyle(
-                      letterSpacing: 3,
-                      color: green,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 650),
-                    switchInCurve: Curves.easeOut,
-                    switchOutCurve: Curves.easeIn,
-                    transitionBuilder: (child, animation) => FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0, 0.12),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
-                      ),
-                    ),
-                    child: Text(
-                      heroMessages[heroCopyIndex],
-                      key: ValueKey(heroCopyIndex),
-                      style: Theme.of(context).textTheme.headlineLarge
-                          ?.copyWith(fontSize: wide ? 60 : 40, height: 1.02),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Find the dress. Add the shoes. Make it yours.\nExplore your next everyday favourites.',
-                    style: TextStyle(height: 1.7, color: Color(0xff5a645c)),
-                  ),
-                ],
-              ),
+        if (wide) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: help,
+              icon: const Icon(Icons.help_outline),
+              label: const Text('Size, delivery & returns'),
             ),
-            if (wide && heroProducts.isNotEmpty) ...[
-              const SizedBox(width: 32),
-              SizedBox(
-                width: 440,
-                height: 285,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            color: green,
+            child: const Text(
+              'MARY’S FASHION  ·  Dresses, shoes & finishing touches  ·  MWK',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ),
+          const SizedBox(height: 28),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      flex: 3,
-                      child: _heroTile(
-                        product:
-                            heroProducts[heroPrimaryIndex %
-                                heroProducts.length],
-                        imageIndex: 0,
-                        large: true,
+                    const Text(
+                      'THE MARY’S EDIT',
+                      style: TextStyle(
+                        letterSpacing: 3,
+                        color: green,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: _heroTile(
-                              product: _heroSecondaryProduct(heroProducts),
-                              imageIndex: _heroSecondaryImageIndex(
-                                heroProducts,
-                              ),
-                              large: false,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            color: green,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 18,
-                              horizontal: 10,
-                            ),
-                            child: const Text(
-                              'THE FINISHING\nTOUCH',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                letterSpacing: 1.7,
-                                height: 1.6,
-                              ),
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 12),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 650),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, 0.12),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
                       ),
+                      child: Text(
+                        heroMessages[heroCopyIndex],
+                        key: ValueKey(heroCopyIndex),
+                        style: Theme.of(context).textTheme.headlineLarge
+                            ?.copyWith(fontSize: wide ? 60 : 40, height: 1.02),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Find the dress. Add the shoes. Make it yours.\nExplore your next everyday favourites.',
+                      style: TextStyle(height: 1.7, color: Color(0xff5a645c)),
                     ),
                   ],
                 ),
               ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 18),
-        Wrap(
-          spacing: 10,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              label: const Text('All'),
-              selected: audience == 'All',
-              onSelected: (_) => setState(() {
-                audience = 'All';
-                category = 'All';
-              }),
-            ),
-            ChoiceChip(
-              label: const Text('Women'),
-              selected: audience == 'Woman',
-              onSelected: (_) => setState(() {
-                audience = 'Woman';
-                category = 'All';
-              }),
-            ),
-            ChoiceChip(
-              label: const Text('Men'),
-              selected: audience == 'Men',
-              onSelected: (_) => setState(() {
-                audience = 'Men';
-                category = 'All';
-              }),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: ['All', ...activeCategories]
-              .map(
-                (c) => ChoiceChip(
-                  label: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
-                    child: Text(c),
+              if (wide && heroProducts.isNotEmpty) ...[
+                const SizedBox(width: 32),
+                SizedBox(
+                  width: 440,
+                  height: 285,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: _heroTile(
+                          product:
+                              heroProducts[heroPrimaryIndex %
+                                  heroProducts.length],
+                          imageIndex: 0,
+                          large: true,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: _heroTile(
+                                product: _heroSecondaryProduct(heroProducts),
+                                imageIndex: _heroSecondaryImageIndex(
+                                  heroProducts,
+                                ),
+                                large: false,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              color: green,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 18,
+                                horizontal: 10,
+                              ),
+                              child: const Text(
+                                'THE FINISHING\nTOUCH',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  letterSpacing: 1.7,
+                                  height: 1.6,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  selected: category == c,
-                  onSelected: (_) => setState(() => category = c),
                 ),
-              )
-              .toList(),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(right: 4, top: 10),
-              child: Text(
-                'Special collections',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              ],
+            ],
+          ),
+          const SizedBox(height: 18),
+        ],
+        if (!wide) ...[
+          Row(
+            children: [
+              const Text(
+                'Filter',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
-            ),
-            for (final c in ['All', ...enabledCollections])
-              ChoiceChip(
-                label: Text(c),
-                selected: collection == c,
-                onSelected: (_) => setState(() => collection = c),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Search products',
+                onPressed: () =>
+                    setState(() => mobileSearchOpen = !mobileSearchOpen),
+                icon: Icon(mobileSearchOpen ? Icons.close : Icons.search),
               ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          spacing: 16,
-          runSpacing: 12,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(
-              width: wide ? 360 : double.infinity,
+            ],
+          ),
+          if (mobileSearchOpen)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
               child: TextField(
+                autofocus: true,
                 decoration: const InputDecoration(
-                  hintText: 'Find your next favourite',
+                  hintText: 'Search clothes, shoes and accessories',
                   prefixIcon: Icon(Icons.search),
                 ),
-                onChanged: (v) => setState(() => query = v),
+                onChanged: (value) => setState(() => query = value),
               ),
             ),
-            SizedBox(
-              width: wide ? null : double.infinity,
-              child: DropdownButton<String>(
-                isExpanded: !wide,
-                value: sort,
-                items: ['Featured', 'Price: low to high', 'Price: high to low']
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                    .toList(),
-                onChanged: (v) => setState(() => sort = v!),
-              ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _mobileFilter<String>(
+                  label: audience == 'All'
+                      ? 'All'
+                      : audience == 'Woman'
+                      ? 'Women'
+                      : 'Men',
+                  value: audience,
+                  values: const {'All': 'All', 'Woman': 'Women', 'Men': 'Men'},
+                  onChanged: (value) => setState(() {
+                    audience = value;
+                    category = 'All';
+                  }),
+                ),
+                _mobileFilter<String>(
+                  label: category == 'All' ? 'Category' : category,
+                  value: category,
+                  values: {
+                    for (final value in ['All', ...activeCategories])
+                      value: value,
+                  },
+                  onChanged: (value) => setState(() => category = value),
+                ),
+                _mobileFilter<String>(
+                  label: collection == 'All' ? 'Collections' : collection,
+                  value: collection,
+                  values: {
+                    for (final value in ['All', ...enabledCollections])
+                      value: value,
+                  },
+                  onChanged: (value) => setState(() => collection = value),
+                ),
+                _mobileFilter<String>(
+                  label: sort,
+                  value: sort,
+                  values: const {
+                    'Featured': 'Featured',
+                    'Price: low to high': 'Price: low to high',
+                    'Price: high to low': 'Price: high to low',
+                  },
+                  onChanged: (value) => setState(() => sort = value),
+                ),
+              ],
             ),
-          ],
-        ),
-        const SizedBox(height: 20),
+          ),
+          const SizedBox(height: 14),
+        ],
+        if (wide) ...[
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('All'),
+                selected: audience == 'All',
+                onSelected: (_) => setState(() {
+                  audience = 'All';
+                  category = 'All';
+                }),
+              ),
+              ChoiceChip(
+                label: const Text('Women'),
+                selected: audience == 'Woman',
+                onSelected: (_) => setState(() {
+                  audience = 'Woman';
+                  category = 'All';
+                }),
+              ),
+              ChoiceChip(
+                label: const Text('Men'),
+                selected: audience == 'Men',
+                onSelected: (_) => setState(() {
+                  audience = 'Men';
+                  category = 'All';
+                }),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: ['All', ...activeCategories]
+                .map(
+                  (c) => ChoiceChip(
+                    label: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
+                      child: Text(c),
+                    ),
+                    selected: category == c,
+                    onSelected: (_) => setState(() => category = c),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(right: 4, top: 10),
+                child: Text(
+                  'Special collections',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              for (final c in ['All', ...enabledCollections])
+                ChoiceChip(
+                  label: Text(c),
+                  selected: collection == c,
+                  onSelected: (_) => setState(() => collection = c),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 16,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: wide ? 360 : double.infinity,
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Find your next favourite',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (v) => setState(() => query = v),
+                ),
+              ),
+              SizedBox(
+                width: wide ? null : double.infinity,
+                child: DropdownButton<String>(
+                  isExpanded: !wide,
+                  value: sort,
+                  items:
+                      ['Featured', 'Price: low to high', 'Price: high to low']
+                          .map(
+                            (v) => DropdownMenuItem(value: v, child: Text(v)),
+                          )
+                          .toList(),
+                  onChanged: (v) => setState(() => sort = v!),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
         if (compared.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 14),
@@ -2770,6 +3131,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Future<void> checkout() async {
+    if (Api.usesSupabase && Api.token.isEmpty) {
+      final signedIn = await showDialog<bool>(
+        context: context,
+        builder: (_) => const AccountDialog(),
+      );
+      if (signedIn != true || !mounted) return;
+    }
     final previousTotal = subtotal;
     await load();
     if (!mounted || bag.isEmpty || error.isNotEmpty) return;

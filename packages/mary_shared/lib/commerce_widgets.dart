@@ -1165,22 +1165,25 @@ class CheckoutFlow extends StatefulWidget {
 
 class _CheckoutFlowState extends State<CheckoutFlow> {
   final contact = GlobalKey<FormState>();
-  final name = TextEditingController(),
-      phone = TextEditingController(),
-      address = TextEditingController();
-  int step = 0;
-  String delivery = 'Pickup', error = '';
+  final name = TextEditingController();
+  final phone = TextEditingController();
+  final address = TextEditingController();
+  String courier = 'Speed Courier';
   String paymentMethod = 'Airtel Money';
+  String error = '';
   bool sending = false;
+
   int get subtotal => widget.lines.fold(
     0,
-    (sum, l) => sum + (l['price'] as int) * (l['qty'] as int),
+    (sum, line) => sum + (line['price'] as int) * (line['qty'] as int),
   );
   Map<String, dynamic> get fees => Map<String, dynamic>.from(
     widget.settings['delivery_fees'] ??
         {'Pickup': 0, 'Delivery': 3000, 'Express': 6000},
   );
-  int get fee => fees[delivery] as int;
+  int get fee => (fees['Delivery'] as num?)?.toInt() ?? 0;
+  String get deliveryAddress => '$courier · ${address.text.trim()}';
+
   @override
   void dispose() {
     name.dispose();
@@ -1189,19 +1192,29 @@ class _CheckoutFlowState extends State<CheckoutFlow> {
     super.dispose();
   }
 
-  Future<void> next() async {
-    if (step == 0 && !contact.currentState!.validate()) return;
-    if (step < 3) {
-      setState(() => step++);
-      return;
-    }
-    if (Api.usesSupabase && Api.token.isEmpty) {
-      final signedIn = await showDialog<bool>(
-        context: context,
-        builder: (_) => const AccountDialog(),
-      );
-      if (signedIn != true || !mounted) return;
-    }
+  Widget textInput(
+    TextEditingController controller,
+    String label, {
+    bool telephone = false,
+    String? hint,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: TextFormField(
+      controller: controller,
+      keyboardType: telephone ? TextInputType.phone : TextInputType.text,
+      decoration: InputDecoration(labelText: label, hintText: hint),
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) return 'Required';
+        if (telephone && !RegExp(r'^\+?[\d\s-]{9,18}$').hasMatch(value)) {
+          return 'Enter a valid phone number';
+        }
+        return null;
+      },
+    ),
+  );
+
+  Future<void> placeOrder() async {
+    if (!contact.currentState!.validate() || sending) return;
     setState(() {
       sending = true;
       error = '';
@@ -1209,10 +1222,10 @@ class _CheckoutFlowState extends State<CheckoutFlow> {
     try {
       var result = await Api.call('orders', {
         'key': widget.checkoutKey,
-        'customer': name.text,
-        'phone': phone.text,
-        'address': address.text,
-        'delivery': delivery,
+        'customer': name.text.trim(),
+        'phone': phone.text.trim(),
+        'address': deliveryAddress,
+        'delivery': 'Delivery',
         'items': widget.lines,
         'expected_total': subtotal + fee,
         'payment_method': paymentMethod,
@@ -1260,8 +1273,8 @@ class _CheckoutFlowState extends State<CheckoutFlow> {
         ...result,
         'customer': name.text.trim(),
         'phone': phone.text.trim(),
-        'address': address.text.trim(),
-        'delivery': delivery,
+        'address': deliveryAddress,
+        'delivery': courier,
         'delivery_fee': fee,
         'payment_status':
             result['payment_status'] ?? 'Due on collection / delivery',
@@ -1276,231 +1289,221 @@ class _CheckoutFlowState extends State<CheckoutFlow> {
     }
   }
 
-  Widget textInput(
-    TextEditingController c,
-    String label, {
-    bool telephone = false,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: TextFormField(
-      controller: c,
-      keyboardType: telephone ? TextInputType.phone : TextInputType.text,
-      decoration: InputDecoration(labelText: label),
-      validator: (v) {
-        if (v == null || v.trim().isEmpty) return 'Required';
-        if (telephone && !RegExp(r'^\+?[\d\s-]{9,18}$').hasMatch(v)) {
-          return 'Enter a valid phone number';
-        }
-        return null;
-      },
-    ),
-  );
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !sending,
-    child: AlertDialog(
-      title: const Text('Checkout'),
-      content: SizedBox(
-        width: 640,
-        height: MediaQuery.sizeOf(context).height * .66,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (var i = 0; i < 4; i++)
-                    Chip(
-                      backgroundColor: i == step ? green : null,
-                      label: Text(
-                        '${i + 1}. ${['Contact', 'Payment', 'Delivery', 'Review'][i]}',
-                        style: TextStyle(color: i == step ? Colors.white : ink),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              if (step == 0)
-                Form(
-                  key: contact,
-                  child: Column(
-                    children: [
-                      textInput(name, 'Full name'),
-                      textInput(phone, 'Phone number', telephone: true),
-                      textInput(address, 'Delivery address / pickup area'),
-                    ],
-                  ),
-                ),
-              if (step == 1)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Card(
-                      color: const Color(0xfff4f6f2),
-                      child: ListTile(
-                        leading: const Icon(Icons.person_outline, color: green),
-                        title: Text(name.text),
-                        subtitle: Text(address.text),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Payment method',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 6),
-                    for (final method in const [
-                      (
-                        'Airtel Money',
-                        Icons.phone_android_outlined,
-                        'Airtel Money wallet',
-                      ),
-                      (
-                        'Bank payment',
-                        Icons.account_balance_outlined,
-                        'Card or bank transfer',
-                      ),
-                    ])
-                      RadioListTile<String>(
-                        value: method.$1,
-                        groupValue: paymentMethod,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(method.$1),
-                        subtitle: Text(method.$3),
-                        secondary: Icon(method.$2, color: green),
-                        onChanged: sending
-                            ? null
-                            : (value) => setState(() => paymentMethod = value!),
-                      ),
-                    const SizedBox(height: 8),
-                    Text(
-                      Api.usesSupabase
-                          ? 'Continue to PayChangu for this one-time payment.'
-                          : 'Online payment will be available after the merchant account is connected.',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xff697469),
-                      ),
-                    ),
-                  ],
-                ),
-              if (step == 2)
-                Column(
-                  children: [
-                    for (final method in ['Pickup', 'Delivery', 'Express'])
-                      Card(
-                        child: ListTile(
-                          onTap: sending
-                              ? null
-                              : () => setState(() => delivery = method),
-                          leading: Icon(
-                            delivery == method
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_off,
-                            color: green,
-                          ),
-                          title: Text(method),
-                          subtitle: Text(
-                            method == 'Pickup'
-                                ? 'Collect from the shop · no delivery fee'
-                                : method == 'Express'
-                                ? 'Priority delivery · demo rate'
-                                : 'Standard delivery · demo rate',
-                          ),
-                          trailing: Text(money(fees[method])),
-                        ),
-                      ),
-                    if (delivery == 'Express')
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Text(
-                          'Express delivery: ${money(fees['Express'])} total. The difference from standard delivery is ${money(fees['Express'] - fees['Delivery'])}. Confirm availability with the shop.',
-                        ),
-                      ),
-                  ],
-                ),
-              if (step == 3)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Review your order',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    for (final l in widget.lines)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 7),
-                        child: Text(
-                          '${l['qty']} × ${l['name']}\n${l['variant']} · ${money(l['price'] * l['qty'])}',
-                        ),
-                      ),
-                    const Divider(),
-                    Text('${name.text} · ${phone.text}\n${address.text}'),
-                    const SizedBox(height: 12),
-                    Text(
-                      '$delivery · ${Api.usesSupabase ? paymentMethod : 'Pay on collection / delivery'}',
-                    ),
-                    const SizedBox(height: 12),
-                    Text('Items: ${money(subtotal)}\nDelivery: ${money(fee)}'),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Total: ${money(subtotal + fee)}',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: green,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      Api.usesSupabase
-                          ? 'You will complete payment in the secure PayChangu checkout before confirmation.'
-                          : 'This places a preview order. No online payment is charged.',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ],
-                ),
-              if (error.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Text(error, style: const TextStyle(color: Colors.red)),
-                ),
-            ],
-          ),
+  Widget detailsForm() => Form(
+    key: contact,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Delivery details',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: sending
+        const SizedBox(height: 12),
+        textInput(name, 'Full name'),
+        textInput(phone, 'Phone number', telephone: true),
+        textInput(
+          address,
+          'Where do you stay?',
+          hint: 'Area, town and preferred collection branch',
+        ),
+        DropdownButtonFormField<String>(
+          initialValue: courier,
+          decoration: const InputDecoration(labelText: 'Favourite courier'),
+          items: const ['Speed Courier', 'CTS', 'Post Office']
+              .map(
+                (value) => DropdownMenuItem(value: value, child: Text(value)),
+              )
+              .toList(),
+          onChanged: sending
               ? null
-              : () {
-                  if (step == 0) {
-                    Navigator.pop(context);
-                  } else {
-                    setState(() => step--);
-                  }
-                },
-          child: Text(step == 0 ? 'Back to cart' : 'Back'),
+              : (value) => setState(() => courier = value!),
         ),
-        FilledButton(
-          onPressed: sending ? null : next,
-          child: Text(
-            sending
-                ? 'Placing order…'
-                : step == 3
-                ? 'Place order'
-                : 'Continue',
-          ),
+        const SizedBox(height: 18),
+        const Text(
+          'Pay securely with PayChangu',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final method in ['Airtel Money', 'Bank payment'])
+              ChoiceChip(
+                selected: paymentMethod == method,
+                label: Text(method),
+                avatar: Icon(
+                  method == 'Airtel Money'
+                      ? Icons.phone_android_outlined
+                      : Icons.account_balance_outlined,
+                  size: 18,
+                ),
+                onSelected: sending
+                    ? null
+                    : (_) => setState(() => paymentMethod = method),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Your chosen courier and location are saved with this order.',
+          style: TextStyle(fontSize: 12, color: Color(0xff697469)),
         ),
       ],
     ),
   );
+
+  Widget orderSummary() => Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: const Color(0xffeef1eb),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xffd5dbd2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Your items',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 12),
+        for (final line in widget.lines)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${line['qty']} × ${line['name']}\n${line['variant']}',
+                  ),
+                ),
+                Text(money((line['price'] as int) * (line['qty'] as int))),
+              ],
+            ),
+          ),
+        const Divider(height: 24),
+        Row(
+          children: [
+            const Expanded(child: Text('Items')),
+            Text(money(subtotal)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            const Expanded(child: Text('Delivery')),
+            Text(money(fee)),
+          ],
+        ),
+        const Divider(height: 24),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Total',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Text(
+              money(subtotal + fee),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: green,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: sending ? null : placeOrder,
+            icon: sending
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.lock_outline),
+            label: Text(
+              sending ? 'Waiting for payment…' : 'Continue to PayChangu',
+            ),
+          ),
+        ),
+        if (error.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(error, style: const TextStyle(color: Colors.red)),
+        ],
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final wide = size.width >= 760;
+    return PopScope(
+      canPop: !sending,
+      child: Dialog(
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: wide ? 40 : 12,
+          vertical: wide ? 30 : 12,
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 980, maxHeight: 760),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 8, 6),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Complete your order',
+                        style: TextStyle(
+                          fontFamily: 'BrandSerif',
+                          fontSize: 28,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close checkout',
+                      onPressed: sending ? null : () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: wide
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: detailsForm()),
+                            const SizedBox(width: 24),
+                            Expanded(child: orderSummary()),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            detailsForm(),
+                            const SizedBox(height: 18),
+                            orderSummary(),
+                          ],
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class ComparisonView extends StatelessWidget {
