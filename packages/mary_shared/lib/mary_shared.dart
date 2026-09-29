@@ -366,6 +366,18 @@ class Api {
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 400 &&
+          (response.body.contains('reply_body') ||
+              response.body.contains('replied_at'))) {
+        response = await client
+            .get(
+              Uri.parse(
+                '$supabaseUrl/rest/v1/product_reviews?select=id,product_id,reviewer_name,rating,body,created_at&product_id=eq.$productId&order=created_at.desc',
+              ),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 15));
+      }
       if (response.statusCode >= 400) {
         throw Exception('Unable to load customer reviews.');
       }
@@ -404,6 +416,18 @@ class Api {
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 400 &&
+          (response.body.contains('reply_body') ||
+              response.body.contains('replied_at'))) {
+        response = await client
+            .get(
+              Uri.parse(
+                '$supabaseUrl/rest/v1/product_reviews?select=id,product_id,reviewer_name,rating,body,created_at&order=created_at.desc',
+              ),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 15));
+      }
       if (response.statusCode >= 400) {
         throw Exception('Unable to load customer reviews.');
       }

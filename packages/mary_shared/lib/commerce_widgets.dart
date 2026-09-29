@@ -99,6 +99,136 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
     }
   }
 
+  Future<void> askAboutProduct() async {
+    if (Api.token.isEmpty) {
+      final signedIn = await showDialog<bool>(
+        context: context,
+        builder: (_) => const AccountDialog(),
+      );
+      if (signedIn != true || !mounted) return;
+    }
+    final chosen = variant == null ? '' : ' ya ${variant!}';
+    final composer = TextEditingController(
+      text: chosen.isEmpty
+          ? 'Item iyi ilipobe?'
+          : 'Size$chosen ya item iyi ilipo?',
+    );
+    var sending = false;
+    String error = '';
+    final sent = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.help_outline, color: green),
+              SizedBox(width: 9),
+              Text('Funsani'),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  p['name'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text('Dinani uthenga, kenako mutha kuusintha.'),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ActionChip(
+                      label: const Text('Item iyi ilipobe?'),
+                      onPressed: () => setDialogState(
+                        () => composer.text = 'Item iyi ilipobe?',
+                      ),
+                    ),
+                    ActionChip(
+                      label: Text(
+                        variant == null
+                            ? 'Size ya item iyi ilipo?'
+                            : 'Size ya ${variant!} ilipo?',
+                      ),
+                      onPressed: () => setDialogState(
+                        () => composer.text = variant == null
+                            ? 'Size ya item iyi ilipo?'
+                            : 'Size ya ${variant!} ilipo?',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: composer,
+                  enabled: !sending,
+                  minLines: 2,
+                  maxLines: 5,
+                  maxLength: 4000,
+                  decoration: const InputDecoration(
+                    labelText: 'Lembani uthenga wanu',
+                    hintText: 'Funsani za item iyi…',
+                  ),
+                ),
+                if (error.isNotEmpty)
+                  Text(error, style: const TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: sending ? null : () => Navigator.pop(context, false),
+              child: const Text('Tsekani'),
+            ),
+            FilledButton.icon(
+              onPressed: sending
+                  ? null
+                  : () async {
+                      if (composer.text.trim().isEmpty) return;
+                      setDialogState(() {
+                        sending = true;
+                        error = '';
+                      });
+                      try {
+                        await Api.call('message-send', {
+                          'thread_id': null,
+                          'subject': 'Funsani: ${p['name']} (${p['id']})',
+                          'body':
+                              '${composer.text.trim()}\n\nItem: ${p['name']}\nProduct ID: ${p['id']}${variant == null ? '' : '\nSize / colour: $variant'}',
+                        });
+                        if (context.mounted) Navigator.pop(context, true);
+                      } catch (e) {
+                        if (context.mounted) {
+                          setDialogState(() {
+                            sending = false;
+                            error = e.toString().replaceFirst(
+                              'Exception: ',
+                              '',
+                            );
+                          });
+                        }
+                      }
+                    },
+              icon: const Icon(Icons.send_outlined),
+              label: Text(sending ? 'Kutumiza…' : 'Tumizani uthenga'),
+            ),
+          ],
+        ),
+      ),
+    );
+    composer.dispose();
+    if (sent == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Uthenga watumizidwa ku Mary’s Fashion.')),
+      );
+    }
+  }
+
   Widget gallery(bool desktop) {
     Widget thumbnail(String item) => InkWell(
       onTap: () => setState(() => image = item),
@@ -359,15 +489,24 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
           ),
         ],
       ),
-      SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          onPressed: variant == null
-              ? null
-              : () => widget.onAdd(variant!, quantity, image),
-          icon: const Icon(Icons.shopping_cart_outlined),
-          label: Text(variant == null ? 'Choose an option' : 'Add to cart'),
-        ),
+      Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: variant == null
+                  ? null
+                  : () => widget.onAdd(variant!, quantity, image),
+              icon: const Icon(Icons.shopping_cart_outlined),
+              label: Text(variant == null ? 'Choose an option' : 'Add to cart'),
+            ),
+          ),
+          const SizedBox(width: 9),
+          OutlinedButton.icon(
+            onPressed: askAboutProduct,
+            icon: const Icon(Icons.help_outline),
+            label: const Text('Funsani'),
+          ),
+        ],
       ),
       Wrap(
         children: [
