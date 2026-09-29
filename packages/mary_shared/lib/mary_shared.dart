@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'dart:math';
 
@@ -2953,30 +2952,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       Uri.parse('https://marysfashion.afrisoft.store/')
           .replace(queryParameters: {'product': product['id'].toString()});
 
-  Future<void> shareListing(dynamic product, BuildContext shareContext) async {
-    final link = listingLink(product);
-    final text =
-        '${product['name']} — ${money(product['price'] as num)}\n$link';
-    try {
-      final box = shareContext.findRenderObject() as RenderBox?;
-      final result = await SharePlus.instance.share(
-        ShareParams(
-          title: product['name'].toString(),
-          subject: 'See this item at Mary’s Fashion',
-          text: text,
-          sharePositionOrigin: box == null
-              ? null
-              : box.localToGlobal(Offset.zero) & box.size,
-        ),
-      );
-      if (result.status == ShareResultStatus.unavailable) {
-        await copyListingLink(product);
-      }
-    } catch (_) {
-      await copyListingLink(product);
-    }
-  }
-
   Future<void> copyListingLink(dynamic product) async {
     await Clipboard.setData(
       ClipboardData(text: listingLink(product).toString()),
@@ -3017,7 +2992,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               ? saved.remove(p['id'])
               : saved.add(p['id']),
         ),
-        onShare: (shareContext) => shareListing(p, shareContext),
         onCopyLink: () => copyListingLink(p),
         onCompare: () {
           if (!compared.contains(p['id']) && compared.length >= 3) {
