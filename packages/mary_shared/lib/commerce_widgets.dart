@@ -3,7 +3,8 @@ part of 'mary_shared.dart';
 class EnhancedProductDetails extends StatefulWidget {
   final Map<String, dynamic> product;
   final bool saved;
-  final VoidCallback onSave, onCompare;
+  final VoidCallback onSave, onCompare, onCopyLink;
+  final Future<void> Function(BuildContext context) onShare;
   final void Function(String variant, int quantity, String image) onAdd;
   const EnhancedProductDetails({
     super.key,
@@ -11,6 +12,8 @@ class EnhancedProductDetails extends StatefulWidget {
     required this.saved,
     required this.onSave,
     required this.onCompare,
+    required this.onCopyLink,
+    required this.onShare,
     required this.onAdd,
   });
 
@@ -385,6 +388,18 @@ class _EnhancedProductDetailsState extends State<EnhancedProductDetails> {
             onPressed: widget.onCompare,
             icon: const Icon(Icons.compare_arrows),
             label: const Text('Compare'),
+          ),
+          Builder(
+            builder: (shareContext) => TextButton.icon(
+              onPressed: () => widget.onShare(shareContext),
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('Share'),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: widget.onCopyLink,
+            icon: const Icon(Icons.link),
+            label: const Text('Copy link'),
           ),
         ],
       ),

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'dart:math';
 
@@ -1382,6 +1383,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       error = '';
   bool loading = true, onlySaved = false, busy = false;
   bool mobileSearchOpen = false;
+  bool sharedProductHandled = false;
   Map<String, dynamic>? confirmation;
   String checkoutKey = '';
   Map<String, dynamic> staffData = {}, settings = {};
@@ -1507,6 +1509,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         );
       }
       startHeroRotation();
+      if (!widget.inventory && !sharedProductHandled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) openSharedProduct();
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -2942,6 +2949,63 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     );
   }
 
+  Uri listingLink(dynamic product) =>
+      Uri.parse('https://marysfashion.afrisoft.store/')
+          .replace(queryParameters: {'product': product['id'].toString()});
+
+  Future<void> shareListing(dynamic product, BuildContext shareContext) async {
+    final link = listingLink(product);
+    final text =
+        '${product['name']} — ${money(product['price'] as num)}\n$link';
+    try {
+      final box = shareContext.findRenderObject() as RenderBox?;
+      final result = await SharePlus.instance.share(
+        ShareParams(
+          title: product['name'].toString(),
+          subject: 'See this item at Mary’s Fashion',
+          text: text,
+          sharePositionOrigin: box == null
+              ? null
+              : box.localToGlobal(Offset.zero) & box.size,
+        ),
+      );
+      if (result.status == ShareResultStatus.unavailable) {
+        await copyListingLink(product);
+      }
+    } catch (_) {
+      await copyListingLink(product);
+    }
+  }
+
+  Future<void> copyListingLink(dynamic product) async {
+    await Clipboard.setData(
+      ClipboardData(text: listingLink(product).toString()),
+    );
+    tell('Listing link copied. You can paste it anywhere.');
+  }
+
+  void openSharedProduct() {
+    if (sharedProductHandled || widget.inventory) return;
+    final productId = Uri.base.queryParameters['product']?.trim();
+    if (productId == null || productId.isEmpty) return;
+    sharedProductHandled = true;
+    final match = products
+        .where((product) => product['id']?.toString() == productId)
+        .firstOrNull;
+    if (match == null) {
+      tell('This listing is unavailable or has been removed.');
+      return;
+    }
+    setState(() {
+      page = 'Shop';
+      audience = 'All';
+      category = 'All';
+      collection = 'All';
+      onlySaved = false;
+    });
+    detail(match);
+  }
+
   void detail(dynamic p) {
     showDialog(
       context: context,
@@ -2953,6 +3017,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               ? saved.remove(p['id'])
               : saved.add(p['id']),
         ),
+        onShare: (shareContext) => shareListing(p, shareContext),
+        onCopyLink: () => copyListingLink(p),
         onCompare: () {
           if (!compared.contains(p['id']) && compared.length >= 3) {
             tell('Compare up to three pieces at a time.');
